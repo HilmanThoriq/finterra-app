@@ -1,5 +1,5 @@
 // src/screens/main/HistoryScreen.js
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,39 +9,167 @@ import {
   TextInput,
   TouchableOpacity,
   StatusBar,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../../context/AuthContext';
+import firestoreService from '../../services/firestoreService';
 import Colors from '../../constants/Colors';
 
 export default function HistoryScreen({ navigation }) {
+  const { user } = useAuth();
+  
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('All');
+  const [expenses, setExpenses] = useState([]);
+  const [summary, setSummary] = useState({
+    totalSpent: 0,
+    transactionCount: 0,
+    startDate: null,
+    endDate: null
+  });
 
-  const filters = ['All', 'This Month', 'Food', 'Shopping', 'Transport', '+ More'];
+  const filters = ['All', 'This Month', 'food', 'shopping', 'transport', 'entertainment', 'health', 'bills'];
 
-  const transactions = {
-    TODAY: {
-      total: 125000,
-      items: [
-        { id: 1, name: 'Kopi Kenangan', location: 'Grand Indonesia', time: '08:15', amount: 25000, icon: 'fast-food', category: 'Food', iconBg: '#FEE2E2', iconColor: '#FF6B6B' },
-        { id: 2, name: 'Gojek', location: 'Office - Home', time: '17:30', amount: 50000, icon: 'train', category: 'Transport', iconBg: '#DBEAFE', iconColor: '#4D9FFF' },
-        { id: 3, name: 'Tokopedia', location: 'Online', time: '19:45', amount: 50000, icon: 'cart', category: 'Shopping', iconBg: '#FEF3C7', iconColor: '#FFB84D' },
-      ]
-    },
-    YESTERDAY: {
-      total: 250000,
-      items: [
-        { id: 4, name: 'Warung Nasi Padang', location: 'Blok M', time: '12:30', amount: 35000, icon: 'fast-food', category: 'Food', iconBg: '#FEE2E2', iconColor: '#FF6B6B' },
-        { id: 5, name: 'Cinema XXI', location: 'Plaza Senayan', time: '20:00', amount: 100000, icon: 'game-controller', category: 'Entertainment', iconBg: '#F3E5F5', iconColor: '#9B59B6' },
-      ]
-    },
-    '14 NOV': {
-      total: 80000,
-      items: [
-        { id: 6, name: 'MRT Jakarta', location: 'Istora Mandiri', time: '08:00', amount: 15000, icon: 'train', category: 'Transport', iconBg: '#DBEAFE', iconColor: '#4D9FFF' },
-      ]
+  useEffect(() => {
+    if (user?.uid) {
+      loadHistoryData();
+    }
+  }, [user]);
+
+  // Reload when screen comes into focus
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (user?.uid) {
+        loadHistoryData();
+      }
+    });
+    return unsubscribe;
+  }, [navigation, user]);
+
+  // Reload when filter or search changes
+  useEffect(() => {
+    if (user?.uid && !loading) {
+      loadHistoryData();
+    }
+  }, [selectedFilter, searchQuery]);
+
+  const loadHistoryData = async () => {
+    try {
+      setLoading(true);
+      
+      const filters = {
+        category: selectedFilter,
+        searchQuery: searchQuery.trim()
+      };
+
+      const [expensesData, summaryData] = await Promise.all([
+        firestoreService.getAllExpenses(user.uid, filters),
+        firestoreService.getHistorySummary(user.uid, filters)
+      ]);
+
+      setExpenses(expensesData);
+      setSummary(summaryData);
+    } catch (error) {
+      console.error('Error loading history:', error);
+    } finally {
+      setLoading(false);
     }
   };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadHistoryData();
+    setRefreshing(false);
+  };
+
+  // Group expenses by date
+  const groupExpensesByDate = () => {
+    const grouped = {};
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    expenses.forEach(expense => {
+      const expenseDate = new Date(expense.date);
+      const expenseDateOnly = new Date(expenseDate.getFullYear(), expenseDate.getMonth(), expenseDate.getDate());
+
+      let key;
+      if (expenseDateOnly.getTime() === today.getTime()) {
+        key = 'TODAY';
+      } else if (expenseDateOnly.getTime() === yesterday.getTime()) {
+        key = 'YESTERDAY';
+      } else {
+        key = expenseDate.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }).toUpperCase();
+      }
+
+      if (!grouped[key]) {
+        grouped[key] = {
+          total: 0,
+          items: []
+        };
+      }
+
+      grouped[key].total += expense.amount;
+      grouped[key].items.push(expense);
+    });
+
+    return grouped;
+  };
+
+  // Get category style
+  const getCategoryStyle = (category) => {
+    const styles = {
+      'food': { icon: 'fast-food', color: '#FEE2E2', iconColor: '#FF6B6B' },
+      'transport': { icon: 'train', color: '#DBEAFE', iconColor: '#4D9FFF' },
+      'shopping': { icon: 'cart', color: '#FEF3C7', iconColor: '#FFB84D' },
+      'entertainment': { icon: 'game-controller', color: '#F3E5F5', iconColor: '#9B59B6' },
+      'health': { icon: 'fitness', color: '#E8F5E9', iconColor: '#4CAF50' },
+      'bills': { icon: 'document-text', color: '#F5F5F5', iconColor: '#757575' },
+      'others': { icon: 'ellipsis-horizontal-circle', color: '#E0F2F1', iconColor: Colors.primary },
+    };
+    return styles[category?.toLowerCase()] || styles['others'];
+  };
+
+  // Format time
+  const formatTime = (date) => {
+    return new Date(date).toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: false 
+    });
+  };
+
+  // Format date range
+  const formatDateRange = () => {
+    if (!summary.startDate || !summary.endDate) return '-';
+    
+    const start = new Date(summary.startDate);
+    const end = new Date(summary.endDate);
+    
+    return `${start.getDate()} ${start.toLocaleDateString('en-US', { month: 'short' })} - ${end.getDate()} ${end.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`;
+  };
+
+  // Format filter label
+  const formatFilterLabel = (filter) => {
+    if (filter === 'All' || filter === 'This Month') return filter;
+    return filter.charAt(0).toUpperCase() + filter.slice(1);
+  };
+
+  const groupedExpenses = groupExpensesByDate();
+
+  if (loading && !refreshing) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={{ marginTop: 16, color: Colors.textTertiary }}>Loading history...</Text>
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -64,10 +192,21 @@ export default function HistoryScreen({ navigation }) {
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
+          {searchQuery !== '' && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={20} color={Colors.textTertiary} />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} />
+        }
+      >
         {/* Filter Chips */}
         <ScrollView
           horizontal
@@ -88,7 +227,7 @@ export default function HistoryScreen({ navigation }) {
                 styles.filterText,
                 selectedFilter === filter && styles.filterTextActive
               ]}>
-                {filter}
+                {formatFilterLabel(filter)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -97,44 +236,63 @@ export default function HistoryScreen({ navigation }) {
         {/* Summary Card */}
         <View style={styles.summaryCard}>
           <Text style={styles.summaryLabel}>TOTAL SPENT</Text>
-          <Text style={styles.summaryAmount}>Rp 1.450.000</Text>
+          <Text style={styles.summaryAmount}>Rp {summary.totalSpent.toLocaleString('id-ID')}</Text>
           <View style={styles.summaryFooter}>
-            <Text style={styles.summaryPeriod}>1 Nov - 16 Nov 2025</Text>
-            <Text style={styles.summaryTransactions}>23 transactions</Text>
+            <Text style={styles.summaryPeriod}>{formatDateRange()}</Text>
+            <Text style={styles.summaryTransactions}>
+              {summary.transactionCount} {summary.transactionCount === 1 ? 'transaction' : 'transactions'}
+            </Text>
           </View>
         </View>
 
         {/* Transaction List */}
-        {Object.entries(transactions).map(([date, data]) => (
-          <View key={date} style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>{date}</Text>
-              <Text style={styles.sectionTotal}>- Rp {data.total.toLocaleString('id-ID')}</Text>
-            </View>
-
-            {data.items.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={styles.transactionItem}
-                onPress={() => navigation.navigate('ExpenseDetail', { id: item.id })}
-              >
-                <View style={[styles.transactionIcon, { backgroundColor: item.iconBg }]}>
-                  <Ionicons name={item.icon} size={20} color={item.iconColor} />
-                </View>
-                <View style={styles.transactionInfo}>
-                  <Text style={styles.transactionAmount}>- Rp {item.amount.toLocaleString('id-ID')}</Text>
-                  <View style={styles.transactionMeta}>
-                    <Ionicons name="location-sharp" size={10} color={Colors.danger} style={{ marginRight: 2 }} />
-                    <Text style={styles.transactionLocation}>{item.location}</Text>
-                    <Text style={styles.transDot}> • </Text>
-                    <Text style={styles.transactionTime}>{item.time}</Text>
-                  </View>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#D1D5DB" />
-              </TouchableOpacity>
-            ))}
+        {Object.keys(groupedExpenses).length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="receipt-outline" size={64} color={Colors.textTertiary} />
+            <Text style={styles.emptyText}>No transactions found</Text>
+            <Text style={styles.emptySubtext}>
+              {searchQuery || selectedFilter !== 'All' 
+                ? 'Try adjusting your filters or search query'
+                : 'Start tracking your expenses to see them here'}
+            </Text>
           </View>
-        ))}
+        ) : (
+          Object.entries(groupedExpenses).map(([date, data]) => (
+            <View key={date} style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>{date}</Text>
+                <Text style={styles.sectionTotal}>- Rp {data.total.toLocaleString('id-ID')}</Text>
+              </View>
+
+              {data.items.map((item) => {
+                const categoryStyle = getCategoryStyle(item.category);
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={styles.transactionItem}
+                    onPress={() => navigation.navigate('ExpenseDetail', { expenseId: item.id })}
+                  >
+                    <View style={[styles.transactionIcon, { backgroundColor: categoryStyle.color }]}>
+                      <Ionicons name={categoryStyle.icon} size={20} color={categoryStyle.iconColor} />
+                    </View>
+                    <View style={styles.transactionInfo}>
+                      <Text style={styles.transactionAmount}>- Rp {item.amount.toLocaleString('id-ID')}</Text>
+                      <View style={styles.transactionMeta}>
+                        <Ionicons name="location-sharp" size={10} color={Colors.danger} style={{ marginRight: 2 }} />
+                        <Text style={styles.transactionLocation}>
+                          {item.locationName || formatFilterLabel(item.category)}
+                        </Text>
+                        <Text style={styles.transDot}> • </Text>
+                        <Text style={styles.transactionTime}>{formatTime(item.date)}</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color="#D1D5DB" />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ))
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -254,6 +412,23 @@ const styles = StyleSheet.create({
   summaryTransactions: {
     fontSize: 14,
     color: 'rgba(255,255,255,0.9)',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 40,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+    marginTop: 16,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: Colors.textTertiary,
+    marginTop: 8,
+    textAlign: 'center',
   },
   section: {
     paddingHorizontal: 24,

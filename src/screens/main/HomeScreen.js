@@ -83,18 +83,18 @@ export default function HomeScreen({ navigation }) {
     });
   };
 
-  // Get category icon and color
+  // Get category icon and color - FIXED to match database structure
   const getCategoryStyle = (category) => {
     const styles = {
-      'Food & Drink': { icon: 'fast-food', color: '#E0F2F1', iconColor: '#009688' },
-      'Transport': { icon: 'train', color: '#E3F2FD', iconColor: '#2196F3' },
-      'Shopping': { icon: 'cart', color: '#FFF3E0', iconColor: '#FF9800' },
-      'Entertainment': { icon: 'game-controller', color: '#F3E5F5', iconColor: '#9C27B0' },
-      'Health': { icon: 'fitness', color: '#E8F5E9', iconColor: '#4CAF50' },
-      'Bills': { icon: 'document-text', color: '#F5F5F5', iconColor: '#757575' },
-      'Others': { icon: 'ellipsis-horizontal-circle', color: '#E0F2F1', iconColor: Colors.primary },
+      'food': { icon: 'fast-food', color: '#E0F2F1', iconColor: '#009688', label: 'Food' },
+      'transport': { icon: 'train', color: '#E3F2FD', iconColor: '#2196F3', label: 'Transport' },
+      'shopping': { icon: 'cart', color: '#FFF3E0', iconColor: '#FF9800', label: 'Shopping' },
+      'entertainment': { icon: 'game-controller', color: '#F3E5F5', iconColor: '#9C27B0', label: 'Entertainment' },
+      'health': { icon: 'fitness', color: '#E8F5E9', iconColor: '#4CAF50', label: 'Health' },
+      'bills': { icon: 'document-text', color: '#F5F5F5', iconColor: '#757575', label: 'Bills' },
+      'others': { icon: 'ellipsis-horizontal-circle', color: '#E0F2F1', iconColor: Colors.primary, label: 'Others' },
     };
-    return styles[category] || styles['Others'];
+    return styles[category?.toLowerCase()] || styles['others'];
   };
 
   // Format time
@@ -122,6 +122,13 @@ export default function HomeScreen({ navigation }) {
         month: 'short' 
       });
     }
+  };
+
+  // Format category name for display
+  const formatCategoryName = (categoryId) => {
+    if (!categoryId) return 'No data';
+    const categoryStyle = getCategoryStyle(categoryId);
+    return categoryStyle.label;
   };
 
   if (loading && !refreshing) {
@@ -212,7 +219,7 @@ export default function HomeScreen({ navigation }) {
               <Ionicons name="pie-chart" size={20} color={Colors.textPrimary} />
             </View>
             <Text style={[styles.statValue, { fontSize: topCategory.name ? 14 : 16 }]}>
-              {topCategory.name || 'No data'}
+              {formatCategoryName(topCategory.name)}
             </Text>
             <Text style={styles.statLabel}>Top Category</Text>
           </View>
@@ -252,7 +259,7 @@ export default function HomeScreen({ navigation }) {
                 <TouchableOpacity 
                   key={item.id}
                   style={styles.transactionItem}
-                  onPress={() => navigation.navigate('ExpenseDetail', { id: item.id })}
+                  onPress={() => navigation.navigate('ExpenseDetail', { expenseId: item.id })}
                 >
                   <View style={[styles.transIconBox, { backgroundColor: categoryStyle.color }]}>
                     <Ionicons name={categoryStyle.icon} size={20} color={categoryStyle.iconColor} />
@@ -263,7 +270,9 @@ export default function HomeScreen({ navigation }) {
                     <View style={styles.transMeta}>
                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <Ionicons name="location-sharp" size={10} color={Colors.danger} style={{ marginRight: 2 }} />
-                        <Text style={styles.transLocation}>{item.location || item.name}</Text>
+                        <Text style={styles.transLocation}>
+                          {item.locationName || categoryStyle.label}
+                        </Text>
                       </View>
                       <Text style={styles.transDot}> • </Text>
                       <Text style={styles.transTime}>{formatTime(item.date)}</Text>

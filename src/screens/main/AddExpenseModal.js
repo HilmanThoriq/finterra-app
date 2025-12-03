@@ -10,14 +10,18 @@ import {
   ScrollView,
   Alert,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import Colors from '../../constants/Colors';
+import { useAuth } from '../../context/AuthContext';
+import firestoreService from '../../services/firestoreService';
 
-export default function AddExpenseModal({ visible, onClose }) {
+export default function AddExpenseModal({ visible, onClose, onExpenseAdded }) {
+  const { user } = useAuth();
   const [amount, setAmount] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [locationName, setLocationName] = useState('');
@@ -27,6 +31,7 @@ export default function AddExpenseModal({ visible, onClose }) {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [showMapModal, setShowMapModal] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState(null);
+  const [saving, setSaving] = useState(false);
   const [currentRegion, setCurrentRegion] = useState({
     latitude: -6.200,
     longitude: 106.816,
@@ -72,24 +77,59 @@ export default function AddExpenseModal({ visible, onClose }) {
     setDate(new Date());
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    // Validation
     if (!amount || !selectedCategory) {
       Alert.alert('Error', 'Please fill in amount and select category');
       return;
     }
 
-    // TODO: Save to Firestore
-    console.log({
-      amount: parseFloat(amount.replace(/\./g, '')),
-      category: selectedCategory,
-      locationName,
-      location: selectedLocation,
-      note,
-      date,
-    });
+    if (!user) {
+      Alert.alert('Error', 'You must be logged in to add expenses');
+      return;
+    }
 
-    onClose();
-    handleClear();
+    setSaving(true);
+
+    try {
+      // Prepare expense data
+      const expenseData = {
+        amount: parseFloat(amount.replace(/\./g, '')),
+        category: selectedCategory,
+        locationName: locationName.trim(),
+        location: selectedLocation,
+        note: note.trim(),
+        date: date,
+      };
+
+      // Save to Firestore
+      const result = await firestoreService.addExpense(user.uid, expenseData);
+
+      if (result.success) {
+        Alert.alert('Success', result.message, [
+          {
+            text: 'OK',
+            onPress: () => {
+              // Clear form
+              handleClear();
+              // Close modal
+              onClose();
+              // Notify parent to refresh data
+              if (onExpenseAdded) {
+                onExpenseAdded();
+              }
+            }
+          }
+        ]);
+      } else {
+        Alert.alert('Error', result.error || 'Failed to save expense');
+      }
+    } catch (error) {
+      console.error('Error saving expense:', error);
+      Alert.alert('Error', 'An unexpected error occurred');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const formatNumber = (text) => {
@@ -286,13 +326,19 @@ export default function AddExpenseModal({ visible, onClose }) {
             <TouchableOpacity 
               style={[
                 styles.saveButton,
-                (!amount || !selectedCategory) && styles.saveButtonDisabled
+                (!amount || !selectedCategory || saving) && styles.saveButtonDisabled
               ]}
               onPress={handleSave}
-              disabled={!amount || !selectedCategory}
+              disabled={!amount || !selectedCategory || saving}
             >
-              <Ionicons name="checkmark-circle" size={20} color={Colors.surface} />
-              <Text style={styles.saveButtonText}>Save Expense</Text>
+              {saving ? (
+                <ActivityIndicator color={Colors.surface} />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle" size={20} color={Colors.surface} />
+                  <Text style={styles.saveButtonText}>Save Expense</Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
         </View>

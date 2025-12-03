@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "922876532948",
+    "project_id": "finterra-apps",
+    "storage_bucket": "finterra-apps.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:922876532948:android:a9c88f389e97c107ed0341",
+        "android_client_info": {
+          "package_name": "com.hilmanthoriq.finterraapps"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAiJqTy_Rct3Nyj9C8HGUrs0y3FP9-vGL4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

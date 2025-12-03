@@ -1,46 +1,48 @@
 // src/services/authService.js
 import { 
-  createUserWithEmailAndPassword,
+  createUserWithEmailAndPassword, 
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
-  GoogleAuthProvider,
-  signInWithCredential,
-  onAuthStateChanged
+  onAuthStateChanged,
+  updateProfile
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 
-// Google OAuth Configuration
-const GOOGLE_WEB_CLIENT_ID = '1071556685406-o7cmoq0qu14pqe1f3hue78dm0i3sdipr.apps.googleusercontent.com';
-const GOOGLE_IOS_CLIENT_ID = '1071556685406-83amjl5lgmnkpqcuka25jihrbr3dhnpn.apps.googleusercontent.com';
-const GOOGLE_ANDROID_CLIENT_ID = '1071556685406-po3s35bq2fb0j29il3bugp635l6hj70v.apps.googleusercontent.com';
-
 class AuthService {
-  // Email & Password Sign Up
+  // Sign Up with Email
   async signUpWithEmail(email, password, displayName) {
     try {
+      // Create user account
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      await setDoc(doc(db, 'users', user.uid), {
-        uid: user.uid,
-        email: user.email,
-        displayName: displayName || 'User',
-        photoURL: null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        provider: 'email'
+      // Update Firebase Auth profile dengan displayName
+      await updateProfile(user, {
+        displayName: displayName
       });
+
+      // Simpan data user ke Firestore
+      await setDoc(doc(db, 'users', user.uid), {
+        email: email,
+        displayName: displayName,
+        name: displayName,
+        createdAt: new Date().toISOString(),
+        uid: user.uid
+      });
+
+      console.log('User registered successfully:', user.uid);
 
       return {
         success: true,
         user: {
           uid: user.uid,
           email: user.email,
-          displayName: displayName || 'User'
+          displayName: displayName
         }
       };
     } catch (error) {
+      console.error('Sign up error:', error);
       return {
         success: false,
         error: this.getErrorMessage(error.code)
@@ -48,25 +50,47 @@ class AuthService {
     }
   }
 
-  // Email & Password Sign In
+  // Sign In with Email
   async signInWithEmail(email, password) {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
+      const firebaseUser = userCredential.user;
 
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      const userData = userDoc.exists() ? userDoc.data() : null;
+      // Jika displayName belum ada, ambil dari Firestore
+      if (!firebaseUser.displayName) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            const name = userData.displayName || userData.name;
+            
+            if (name) {
+              // Update Firebase Auth profile
+              await updateProfile(firebaseUser, {
+                displayName: name
+              });
+              
+              // Reload user to get updated data
+              await firebaseUser.reload();
+            }
+          }
+        } catch (firestoreError) {
+          console.error('Error fetching user data from Firestore:', firestoreError);
+        }
+      }
+
+      console.log('User signed in successfully:', firebaseUser.uid);
 
       return {
         success: true,
         user: {
-          uid: user.uid,
-          email: user.email,
-          displayName: userData?.displayName || 'User',
-          photoURL: userData?.photoURL || null
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName || 'User'
         }
       };
     } catch (error) {
+      console.error('Sign in error:', error);
       return {
         success: false,
         error: this.getErrorMessage(error.code)
@@ -74,61 +98,38 @@ class AuthService {
     }
   }
 
-  // Google Sign In - Returns config for expo-auth-session
-  getGoogleAuthConfig() {
-    return {
-      androidClientId: GOOGLE_ANDROID_CLIENT_ID,
-      iosClientId: GOOGLE_IOS_CLIENT_ID,
-      webClientId: GOOGLE_WEB_CLIENT_ID,
+  // Sign In with Google - PLACEHOLDER (belum diimplementasikan)
+  async signInWithGoogle() {
+    // Untuk sementara return error karena belum disetup
+    console.warn('Google Sign In is not configured yet');
+    return { 
+      success: false, 
+      error: 'Google Sign In is not available yet' 
     };
   }
 
-  // Process Google Sign In after getting token
-  async processGoogleSignIn(idToken) {
-    try {
-      const credential = GoogleAuthProvider.credential(idToken);
-      const userCredential = await signInWithCredential(auth, credential);
-      const user = userCredential.user;
-
-      // Check if user exists in Firestore
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      
-      if (!userDoc.exists()) {
-        // Create new user profile
-        await setDoc(doc(db, 'users', user.uid), {
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName || 'User',
-          photoURL: user.photoURL || null,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          provider: 'google'
-        });
-      }
-
-      return {
-        success: true,
-        user: {
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName,
-          photoURL: user.photoURL
-        }
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: this.getErrorMessage(error.code)
-      };
-    }
+  // Get Google Auth Config - METHOD BARU untuk menghindari error
+  getGoogleAuthConfig() {
+    return {
+    androidClientId:
+      "1071556685406-po3s35bq2fb0j29il3bugp635l6hj70v.apps.googleusercontent.com",
+    webClientId:
+      "1071556685406-o7cmoq0qu14pqe1f3hue78dm0i3sdipr.apps.googleusercontent.com",
+    iosClientId:
+      "1071556685406-83amjl5lgmnkpqcuka25jihrbr3dhnpn.apps.googleusercontent.com",
+    scopes: ["profile", "email"],
+    redirectUri: undefined,
+  };
   }
 
   // Sign Out
   async signOut() {
     try {
       await firebaseSignOut(auth);
+      console.log('User signed out successfully');
       return { success: true };
     } catch (error) {
+      console.error('Sign out error:', error);
       return {
         success: false,
         error: error.message
@@ -136,32 +137,75 @@ class AuthService {
     }
   }
 
-  // Get Current User
+  // Listen to auth state changes
+  onAuthStateChange(callback) {
+    return onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        // Jika displayName belum ada di Firebase Auth, coba ambil dari Firestore
+        if (!firebaseUser.displayName) {
+          try {
+            const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              const name = userData.displayName || userData.name;
+              
+              if (name) {
+                await updateProfile(firebaseUser, {
+                  displayName: name
+                });
+                await firebaseUser.reload();
+                // Trigger callback dengan user yang sudah ter-update
+                callback(auth.currentUser);
+                return;
+              }
+            }
+          } catch (error) {
+            console.error('Error syncing user data:', error);
+          }
+        }
+      }
+      
+      // Trigger callback dengan firebaseUser
+      callback(firebaseUser);
+    });
+  }
+
+  // Helper function untuk error messages
+  getErrorMessage(errorCode) {
+    switch (errorCode) {
+      case 'auth/email-already-in-use':
+        return 'Email is already registered';
+      case 'auth/invalid-email':
+        return 'Invalid email address';
+      case 'auth/operation-not-allowed':
+        return 'Operation not allowed';
+      case 'auth/weak-password':
+        return 'Password is too weak. Please use at least 6 characters';
+      case 'auth/user-disabled':
+        return 'This account has been disabled';
+      case 'auth/user-not-found':
+        return 'Email not found';
+      case 'auth/wrong-password':
+        return 'Incorrect password';
+      case 'auth/invalid-credential':
+        return 'Invalid email or password';
+      case 'auth/too-many-requests':
+        return 'Too many failed attempts. Please try again later';
+      case 'auth/network-request-failed':
+        return 'Network error. Please check your connection';
+      default:
+        return 'An error occurred. Please try again';
+    }
+  }
+
+  // Get current user
   getCurrentUser() {
     return auth.currentUser;
   }
 
-  // Auth State Listener
-  onAuthStateChange(callback) {
-    return onAuthStateChanged(auth, callback);
-  }
-
-  // Error Message Handler (ENGLISH)
-  getErrorMessage(errorCode) {
-    const errorMessages = {
-      'auth/email-already-in-use': 'Email is already registered',
-      'auth/invalid-email': 'Invalid email format',
-      'auth/operation-not-allowed': 'Operation not allowed',
-      'auth/weak-password': 'Password is too weak (min. 6 characters)',
-      'auth/user-disabled': 'Account has been disabled',
-      'auth/user-not-found': 'Email not registered',
-      'auth/wrong-password': 'Incorrect password',
-      'auth/invalid-credential': 'Invalid email or password',
-      'auth/too-many-requests': 'Too many attempts, please try again later',
-      'auth/network-request-failed': 'No internet connection'
-    };
-
-    return errorMessages[errorCode] || 'An error occurred, please try again';
+  // Check if user is authenticated
+  isAuthenticated() {
+    return !!auth.currentUser;
   }
 }
 
