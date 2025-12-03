@@ -10,7 +10,7 @@ const Colors = {
   primaryLight: '#A8EDE4',      // Light Turquoise - Subtle backgrounds
 
   // ==================== NEUTRAL COLORS ====================
-  background: '#E6E9EF',        // Soft Gray - Main app background
+  background: '#F9FAFB',        // Soft Gray - Main app background
   surface: '#FFFFFF',           // Pure White - Cards, containers
   
   // Text Colors

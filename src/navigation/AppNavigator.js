@@ -1,168 +1,82 @@
-// src/navigation/AppNavigator.js
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import { View, Text, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
-import Colors from '../constants/Colors';
 
-// Auth Screens
+// Screens
 import SplashScreen from '../screens/auth/SplashScreen';
 import OnboardingScreen from '../screens/auth/OnboardingScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
 import RegisterScreen from '../screens/auth/RegisterScreen';
 
+// Main App
+import MainTabNavigator from './MainTabNavigator';
+import NotificationsScreen from '../screens/main/NotificationsScreen';
+import SetBudgetScreen from '../screens/main/SetBudgetScreen';
+import ExpenseDetailScreen from '../screens/main/ExpenseDetailScreen';
+
 const Stack = createStackNavigator();
-
-// Temporary Home Screen - Replace with your actual home screen
-function TemporaryHomeScreen({ navigation }) {
-  const { user, signOut } = useAuth();
-
-  return (
-    <View style={{ 
-      flex: 1, 
-      justifyContent: 'center', 
-      alignItems: 'center',
-      backgroundColor: Colors.surface,
-      padding: 20
-    }}>
-      <Text style={{ 
-        fontSize: 24, 
-        fontWeight: 'bold', 
-        color: Colors.primary,
-        marginBottom: 12
-      }}>
-        Welcome to Finterra!
-      </Text>
-      <Text style={{ 
-        fontSize: 16, 
-        color: Colors.textSecondary,
-        marginBottom: 8 
-      }}>
-        Logged in as: {user?.displayName}
-      </Text>
-      <Text style={{ 
-        fontSize: 14, 
-        color: Colors.textTertiary,
-        marginBottom: 32
-      }}>
-        {user?.email}
-      </Text>
-      
-      <View style={{
-        backgroundColor: '#f0fdf4',
-        padding: 16,
-        borderRadius: 12,
-        marginBottom: 24,
-        borderWidth: 1,
-        borderColor: '#86efac',
-      }}>
-        <Text style={{ fontSize: 14, color: '#166534', textAlign: 'center' }}>
-          ✅ Authentication working!{'\n'}
-          Replace this with your HomeScreen
-        </Text>
-      </View>
-
-      <TouchableOpacity
-        style={{
-          backgroundColor: Colors.danger,
-          paddingHorizontal: 32,
-          paddingVertical: 12,
-          borderRadius: 26,
-        }}
-        onPress={async () => await signOut()}
-      >
-        <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>
-          Logout
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
 
 export default function AppNavigator() {
   const { user, loading: authLoading } = useAuth();
-  
-  const [appState, setAppState] = useState('splash'); // 'splash' | 'ready'
+
+  const [isLoading, setIsLoading] = useState(true);
   const [isFirstLaunch, setIsFirstLaunch] = useState(false);
 
   useEffect(() => {
-    async function initializeApp() {
-      try {
-        // 1. Check if first time launch
-        const hasLaunched = await AsyncStorage.getItem('hasLaunched');
-        const firstTime = hasLaunched === null;
-        
-        if (firstTime) {
-          setIsFirstLaunch(true);
-          await AsyncStorage.setItem('hasLaunched', 'true');
-        } else {
-          setIsFirstLaunch(false);
-        }
+    async function init() {
+      // Minimal splash 1.5s
+      await new Promise(res => setTimeout(res, 1500));
 
-        // 2. Wait for 3 seconds (Splash screen duration)
-        await new Promise(resolve => setTimeout(resolve, 3000));
+      // Check first launch
+      const hasLaunched = await AsyncStorage.getItem('hasLaunched');
 
-        // 3. Mark app as ready
-        setAppState('ready');
-
-      } catch (error) {
-        console.error('Error initializing app:', error);
+      if (!hasLaunched) {
+        setIsFirstLaunch(true);
+        await AsyncStorage.setItem('hasLaunched', 'true');
+      } else {
         setIsFirstLaunch(false);
-        setAppState('ready');
       }
+
+      setIsLoading(false);
     }
 
-    initializeApp();
+    init();
   }, []);
 
-  // ALWAYS show SplashScreen for 3 seconds first
-  if (appState === 'splash' || authLoading) {
+  // Saat Splash OR Auth Firebase masih loading
+  if (isLoading || authLoading) {
     return <SplashScreen />;
   }
 
   return (
     <NavigationContainer>
-      <Stack.Navigator
-        screenOptions={{
-          headerShown: false,
-          gestureEnabled: false,
-        }}
-      >
-        {user ? (
-          // ============================================
-          // USER IS LOGGED IN → Go to Home
-          // ============================================
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+
+        {/* USER BELUM LOGIN */}
+        {!user && (
           <>
-            <Stack.Screen name="Home" component={TemporaryHomeScreen} />
-            {/* TODO: Add your other main screens here */}
-          </>
-        ) : (
-          // ============================================
-          // USER NOT LOGGED IN → Auth Flow
-          // ============================================
-          <>
-            {isFirstLaunch ? (
-              // First time user: Onboarding → Login → Register
-              <>
-                <Stack.Screen 
-                  name="Onboarding" 
-                  component={OnboardingScreen}
-                  options={{ animationEnabled: true }}
-                />
-                <Stack.Screen name="Login" component={LoginScreen} />
-                <Stack.Screen name="Register" component={RegisterScreen} />
-              </>
-            ) : (
-              // Returning user: Login → Register (no onboarding)
-              <>
-                <Stack.Screen name="Login" component={LoginScreen} />
-                <Stack.Screen name="Register" component={RegisterScreen} />
-              </>
+            {isFirstLaunch && (
+              <Stack.Screen name="Onboarding" component={OnboardingScreen} />
             )}
+
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="Register" component={RegisterScreen} />
           </>
         )}
+
+        {/* USER SUDAH LOGIN */}
+        {user && (
+          <>
+            <Stack.Screen name="MainApp" component={MainTabNavigator} />
+
+            <Stack.Screen name="Notifications" component={NotificationsScreen} />
+            <Stack.Screen name="SetBudget" component={SetBudgetScreen} />
+            <Stack.Screen name="ExpenseDetail" component={ExpenseDetailScreen} />
+          </>
+        )}
+
       </Stack.Navigator>
     </NavigationContainer>
   );

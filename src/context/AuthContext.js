@@ -1,3 +1,4 @@
+// src/context/AuthContext.js
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import authService from '../services/authService';
 
@@ -11,6 +12,8 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     // Subscribe to auth state changes
     const unsubscribe = authService.onAuthStateChange(async (firebaseUser) => {
+      console.log('Auth state changed:', firebaseUser ? 'User logged in' : 'User logged out');
+      
       if (firebaseUser) {
         // User is signed in
         setUser({
@@ -24,41 +27,32 @@ export const AuthProvider = ({ children }) => {
         setUser(null);
       }
       
-      if (initializing) {
-        setInitializing(false);
-      }
+      // Mark as not initializing and not loading
+      setInitializing(false);
       setLoading(false);
     });
 
     // Cleanup subscription
     return unsubscribe;
-  }, [initializing]);
+  }, []);
 
   const signUp = async (email, password, displayName) => {
-    setLoading(true);
     const result = await authService.signUpWithEmail(email, password, displayName);
-    setLoading(false);
     return result;
   };
 
   const signIn = async (email, password) => {
-    setLoading(true);
     const result = await authService.signInWithEmail(email, password);
-    setLoading(false);
     return result;
   };
 
   const signInWithGoogle = async () => {
-    setLoading(true);
     const result = await authService.signInWithGoogle();
-    setLoading(false);
     return result;
   };
 
   const signOut = async () => {
-    setLoading(true);
     const result = await authService.signOut();
-    setLoading(false);
     return result;
   };
 
