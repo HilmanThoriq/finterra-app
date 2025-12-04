@@ -233,32 +233,47 @@ FINTERRA menggunakan **Firebase Firestore** dengan struktur koleksi berikut:
 
 ## 📸 Tangkapan Layar Produk
 
+<div align="center">
+
 ### 🔐 **Authentication Flow**
+
 | Splash Screen | Onboarding 1 | Onboarding 2 | Onboarding 3 |
 |:-------------:|:------------:|:------------:|:------------:|
-| ![Splash](./assets/images-readme/splash-screen.png) | ![Onboarding 1](./assets/images-readme/onboarding-1.png) | ![Onboarding 2](./assets/images-readme/onboarding-2.png) | ![Onboarding 3](./assets/images-readme/onboarding-3.png) |
+| <img src="./assets/images-readme/splash-screen.png" alt="Splash" width="200"/> | <img src="./assets/images-readme/onboarding-1.png" alt="Onboarding 1" width="200"/> | <img src="./assets/images-readme/onboarding-2.png" alt="Onboarding 2" width="200"/> | <img src="./assets/images-readme/onboarding-3.png" alt="Onboarding 3" width="200"/> |
 
 | Login Screen | Register Screen |
 |:------------:|:---------------:|
-| ![Login](./assets/images-readme/login-screen.png) | ![Register](./assets/images-readme/register-screen.png) |
+| <img src="./assets/images-readme/login-screen.png" alt="Login" width="200"/> | <img src="./assets/images-readme/register-screen.png" alt="Register" width="200"/> |
+
+</div>
 
 ---
 
+<div align="center">
+
 ### 📱 **Main Tabs**
+
 | Home Dashboard | Map View | Add Expense Modal |
 |:--------------:|:--------:|:-----------------:|
-| ![Home](./assets/images-readme/home-screen.png) | ![Map](./assets/images-readme/map-screen.png) | ![Add Expense](./assets/images-readme/add-expense-modal.png) |
+| <img src="./assets/images-readme/home-screen.png" alt="Home" width="200"/> | <img src="./assets/images-readme/map-screen.png" alt="Map" width="200"/> | <img src="./assets/images-readme/add-expense-modal.png" alt="Add Expense" width="200"/> |
 
 | History Screen | Profile Screen |
 |:--------------:|:--------------:|
-| ![History](./assets/images-readme/history-screen.png) | ![Profile](./assets/images-readme/profile-screen.png) |
+| <img src="./assets/images-readme/history-screen.png" alt="History" width="200"/> | <img src="./assets/images-readme/profile-screen.png" alt="Profile" width="200"/> |
+
+</div>
 
 ---
 
+<div align="center">
+
 ### 🔧 **Additional Screens**
+
 | Set Budget | Expense Detail | Edit Expense Modal | Notifications |
 |:----------:|:--------------:|:------------------:|:-------------:|
-| ![Set Budget](./assets/images-readme/set-budget-screen.png) | ![Detail](./assets/images-readme/expense-detail-screen.png) | ![Edit](./assets/images-readme/edit-expense-modal.png) | ![Notifications](./assets/images-readme/notifications-screen.png) |
+| <img src="./assets/images-readme/set-budget-screen.png" alt="Set Budget" width="200"/> | <img src="./assets/images-readme/expense-detail-screen.png" alt="Detail" width="200"/> | <img src="./assets/images-readme/edit-expense-modal.png" alt="Edit" width="200"/> | <img src="./assets/images-readme/notifications-screen.png" alt="Notifications" width="200"/> |
+
+</div>
 
 ---
 
