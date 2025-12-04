@@ -38,7 +38,6 @@ Dengan FINTERRA, Anda dapat:
 - 📈 Menganalisis pola pengeluaran dengan statistik lengkap
 - 🔥 Visualisasi heatmap untuk hotspot pengeluaran
 
-> **Filosofi Produk:** "Uang bukan hanya angka, tetapi juga cerita tentang ke mana Anda pergi dan apa yang Anda lakukan."
 
 ---
 
@@ -234,124 +233,32 @@ FINTERRA menggunakan **Firebase Firestore** dengan struktur koleksi berikut:
 
 ## 📸 Tangkapan Layar Produk
 
-### 🔐 Authentication Flow
-<div align="center">
-  <img src="./screenshots/splash-screen.png" alt="Splash Screen" width="250"/>
-  <img src="./screenshots/login-screen.png" alt="Login" width="250"/>
-  <img src="./screenshots/register-screen.png" alt="Register" width="250"/>
-</div>
+### 🔐 **Authentication Flow**
+| Splash Screen | Onboarding 1 | Onboarding 2 | Onboarding 3 |
+|:-------------:|:------------:|:------------:|:------------:|
+| ![Splash](./assets/images-readme/splash-screen.png) | ![Onboarding 1](./assets/images-readme/onboarding-1.png) | ![Onboarding 2](./assets/images-readme/onboarding-2.png) | ![Onboarding 3](./assets/images-readme/onboarding-3.png) |
 
-> **Fitur:** Splash screen dengan auto-login, form validation, Firebase Auth integration
-
----
-
-### 🏠 Home Dashboard
-<div align="center">
-  <img src="./screenshots/home-dashboard.png" alt="Home Dashboard" width="600"/>
-</div>
-
-**Highlight:**
-- Monthly budget card dengan progress bar & warning alerts
-- 4 statistic cards: Total Spent, Transactions, Top Category, Daily Average
-- Recent 3 transactions dengan kategori icons
-- Pull-to-refresh untuk real-time data sync
+| Login Screen | Register Screen |
+|:------------:|:---------------:|
+| ![Login](./assets/images-readme/login-screen.png) | ![Register](./assets/images-readme/register-screen.png) |
 
 ---
 
-### ➕ Add Expense Modal
-<div align="center">
-  <img src="./screenshots/add-expense-1.png" alt="Add Expense Form" width="250"/>
-  <img src="./screenshots/add-expense-2.png" alt="Category Selection" width="250"/>
-  <img src="./screenshots/add-expense-3.png" alt="Location Picker" width="250"/>
-</div>
+### 📱 **Main Tabs**
+| Home Dashboard | Map View | Add Expense Modal |
+|:--------------:|:--------:|:-----------------:|
+| ![Home](./assets/images-readme/home-screen.png) | ![Map](./assets/images-readme/map-screen.png) | ![Add Expense](./assets/images-readme/add-expense-modal.png) |
 
-**Fitur:**
-- Amount input dengan thousand separator (Rp format)
-- 7 kategori dengan color-coded icons
-- Date & time picker (default: now)
-- Location name + GPS coordinates picker
-- Optional note field (multiline)
-- Map modal untuk select location
+| History Screen | Profile Screen |
+|:--------------:|:--------------:|
+| ![History](./assets/images-readme/history-screen.png) | ![Profile](./assets/images-readme/profile-screen.png) |
 
 ---
 
-### 📜 History Screen
-<div align="center">
-  <img src="./screenshots/history-main.png" alt="History List" width="250"/>
-  <img src="./screenshots/history-filter.png" alt="Filters Applied" width="250"/>
-  <img src="./screenshots/history-search.png" alt="Search Results" width="250"/>
-</div>
-
-**Fitur:**
-- Search bar dengan live filtering
-- Filter chips (Today, Yesterday, This Week, This Month, Categories)
-- Summary card (total spent + transaction count)
-- Date grouping (TODAY, YESTERDAY, specific dates)
-- Empty state dengan ilustrasi
-
----
-
-### 🗺️ Map Visualization
-<div align="center">
-  <img src="./screenshots/map-markers.png" alt="Map with Markers" width="250"/>
-  <img src="./screenshots/map-callout.png" alt="Marker Callout" width="250"/>
-  <img src="./screenshots/map-nearby.png" alt="Nearby Places" width="250"/>
-</div>
-
-**Fitur:**
-- Color-coded markers per category
-- Custom callout dengan expense details
-- User location tracking (blue dot)
-- Search bar untuk filter expenses
-- Filter chips untuk date ranges
-- Nearby places discovery (50m radius)
-- Real-time distance calculation (Haversine)
-- Draggable bottom sheet UI
-
----
-
-### 📝 Expense Details
-<div align="center">
-  <img src="./screenshots/expense-detail.png" alt="Expense Detail" width="600"/>
-</div>
-
-**Highlight:**
-- Large amount display dengan category color
-- Map view dengan location marker
-- Date & time info card
-- Notes section (optional)
-- Edit button (pencil icon)
-- Delete button dengan confirmation
-
----
-
-### ✏️ Edit Expense
-<div align="center">
-  <img src="./screenshots/edit-expense.png" alt="Edit Expense Modal" width="600"/>
-</div>
-
-**Fitur:**
-- Pre-filled form dengan data existing
-- Update semua field (amount, category, location, note, date)
-- Real-time validation
-- Auto-sync ke Firestore
-- Success feedback
-
----
-
-### 👤 Profile & Settings
-<div align="center">
-  <img src="./screenshots/profile-screen.png" alt="Profile Screen" width="250"/>
-  <img src="./screenshots/set-budget.png" alt="Set Budget" width="250"/>
-  <img src="./screenshots/notifications.png" alt="Notifications" width="250"/>
-</div>
-
-**Fitur:**
-- User profile display (name, email)
-- Set monthly budget
-- Notification preferences
-- About app
-- Logout functionality
+### 🔧 **Additional Screens**
+| Set Budget | Expense Detail | Edit Expense Modal | Notifications |
+|:----------:|:--------------:|:------------------:|:-------------:|
+| ![Set Budget](./assets/images-readme/set-budget-screen.png) | ![Detail](./assets/images-readme/expense-detail-screen.png) | ![Edit](./assets/images-readme/edit-expense-modal.png) | ![Notifications](./assets/images-readme/notifications-screen.png) |
 
 ---
 
@@ -499,99 +406,47 @@ eas build --platform ios
 
 ---
 
-## 🎯 Roadmap & Future Features
+## 🔮 Future Development
 
-### **Version 1.1 (Q1 2025)**
-- [ ] 📸 Receipt scanning dengan OCR (Optical Character Recognition)
-- [ ] 💱 Multi-currency support (USD, EUR, SGD, etc.)
-- [ ] 📊 Advanced analytics: Monthly trends, category breakdown pie chart
-- [ ] 🔔 Push notifications untuk budget alerts
+### **Phase 1: Enhanced Financial Management (Q1 2025)**
+- 📊 **Monthly Financial Report:** Laporan analisis keuangan bulanan lengkap dengan grafik dan insights
+- 💾 **Export to PDF/Excel:** Export laporan ke berbagai format (PDF, Excel, CSV)
+- 📅 **Daily Budget Management:** Atur budget harian dengan tracking otomatis
+- 🔔 **Smart Notifications:** Peringatan budget, reminder pengeluaran, dan tips hemat
+- 📍 **Location-Based Reminders:** Pengingat untuk mencatat pengeluaran saat berada di lokasi yang sering dikunjungi (mall, restoran, dll)
+- 🎯 **Category Budget Allocation:** Atur budget per kategori per bulan (misal: Food Rp 1jt, Transport Rp 500rb)
 
-### **Version 1.2 (Q2 2025)**
-- [ ] 👥 Shared budgets untuk family/group
-- [ ] 💳 Bank account integration (open banking API)
-- [ ] 📤 Export data ke CSV/Excel/PDF
-- [ ] 🌙 Dark mode theme
+### **Phase 2: Multi-Currency & Global Support (Q2 2025)**
+- 💱 **Multi-Currency Support:** IDR, USD, MYR, SGD, EUR, JPY dengan auto-conversion
+- 🌐 **Real-time Exchange Rates:** Integrasi dengan Currency API untuk kurs terkini
+- 🗺️ **International Location Support:** Google Places global coverage
 
-### **Version 2.0 (Q3 2025)**
-- [ ] 🤖 AI-powered spending insights & recommendations
-- [ ] 🗺️ Heatmap visualization untuk spending hotspots
-- [ ] 📱 Widget untuk iOS & Android home screen
-- [ ] 🔗 Integration dengan e-wallet (GoPay, OVO, Dana)
+### **Phase 3: AI & Smart Features (Q3-Q4 2025)**
+- 🤖 **AI Integration:** Machine learning untuk prediksi pengeluaran
+- 🧠 **Smart Analysis:** Pattern recognition untuk spending habits
+- 📸 **Auto Receipt Scanning:** OCR technology untuk scan nota belanja otomatis
+- 💡 **AI Recommendations:** Saran personalized untuk menghemat uang
+- 📈 **Predictive Budget:** Estimasi pengeluaran bulan depan berdasarkan data historis
 
----
-
-## 🐛 Known Issues & Limitations
-
-1. **Google Places API:** Membutuhkan billing account aktif (free tier terbatas)
-2. **Offline Mode:** Saat ini belum support offline data caching
-3. **Location Accuracy:** GPS indoor kurang akurat (margin error ~10-50m)
-4. **iOS Maps:** Memerlukan Apple Developer account untuk production build
-
----
-
-## 🤝 Kontribusi
-
-Kami sangat terbuka untuk kontribusi! Jika Anda ingin berkontribusi:
-
-1. Fork repository ini
-2. Buat branch baru (`git checkout -b feature/AmazingFeature`)
-3. Commit perubahan (`git commit -m 'feat: Add some AmazingFeature'`)
-4. Push ke branch (`git push origin feature/AmazingFeature`)
-5. Buat Pull Request
-
-**Conventional Commits:**
-- `feat:` untuk fitur baru
-- `fix:` untuk bug fixes
-- `docs:` untuk dokumentasi
-- `style:` untuk formatting
-- `refactor:` untuk refactoring code
-- `test:` untuk testing
+### **Phase 4: Advanced Features (2026)**
+- 👥 **Shared Budgets:** Fitur untuk family/group budget management
+- 💳 **Bank Integration:** Connect dengan rekening bank untuk auto-sync transactions
+- 🏆 **Gamification:** Achievement badges untuk saving goals
+- 📱 **Widget Support:** Home screen widget untuk iOS & Android
 
 ---
 
-## 📄 Lisensi
+## 👨‍💻 Tentang Pengembang
 
-Proyek ini dilisensikan di bawah **MIT License**. Lihat file [LICENSE](LICENSE) untuk detail lengkap.
+Aplikasi ini dikembangkan sebagai bagian dari tugas akhir praktikum **Pemrograman Geospasial: Perangkat Bergerak Lanjut**.
 
----
-
-## 👨‍💻 Tim Pengembang
-
-Aplikasi ini dikembangkan sebagai bagian dari tugas akhir praktikum.
-
-**Lead Developer:**
-- **Nama:** [Nama Anda]
-- **NIM:** [NIM Anda]
-- **Program Studi:** Sistem Informasi Geografis
-- **Institusi:** [Nama Universitas]
+**Developer:**
+- **Nama:** Hilman Thoriq
+- **NIM:** 23/522897/SV/23809
+- **Program Studi:** Sistem Informasi Geografis 2023
+- **Institusi:** Universitas Gadjah Mada (UGM)
 - **Mata Kuliah:** Praktikum Pemrograman Geospasial: Perangkat Bergerak Lanjut
-
-**Supervisor:**
-- **Dosen Pengampu:** [Nama Dosen]
-- **Email:** [email@university.edu]
-
----
-
-## 📞 Kontak & Support
-
-Jika Anda memiliki pertanyaan, bug report, atau feature request:
-
-- 📧 Email: [your.email@example.com]
-- 💬 GitHub Issues: [Create New Issue](https://github.com/yourusername/finterra-app/issues)
-- 🐦 Twitter: [@finterra_app](https://twitter.com/finterra_app)
-- 🌐 Website: [finterra-app.com](https://finterra-app.com)
-
----
-
-## 🙏 Acknowledgments
-
-Terima kasih kepada:
-- **Firebase** untuk backend infrastructure yang powerful
-- **Google Maps Platform** untuk location services yang akurat
-- **Expo** untuk development experience yang luar biasa
-- **React Native Community** untuk ecosystem yang solid
-- **Open Source Contributors** untuk library-library yang kami gunakan
+- **Tahun Akademik:** 2024/2025
 
 ---
 
@@ -607,5 +462,5 @@ Terima kasih kepada:
     <a href="https://github.com/yourusername/finterra-app/issues">💡 Request Feature</a>
   </p>
   
-  <small>© 2025 FINTERRA Project. Made with ❤️ in Indonesia.</small>
+  <small>© 2025 FINTERRA Project. Developed with ❤️ by Hilman Thoriq | UGM</small>
 </div>
