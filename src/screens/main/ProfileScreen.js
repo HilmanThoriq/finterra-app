@@ -1,5 +1,5 @@
 // src/screens/main/ProfileScreen.js
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -7,11 +7,11 @@ import {
   ScrollView, 
   TouchableOpacity, 
   Alert,
-  StatusBar
+  StatusBar,
+  ActivityIndicator
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-// Import Firebase Auth
-import { getAuth, signOut } from 'firebase/auth'; 
+import authService from '../../services/authService';
 
 // Definisi Warna
 const COLORS = {
@@ -28,6 +28,36 @@ const COLORS = {
 };
 
 export default function ProfileScreen({ navigation }) {
+  const [userData, setUserData] = useState({
+    displayName: '',
+    email: '',
+    photoURL: null
+  });
+  const [loading, setLoading] = useState(true);
+
+  // Load user data saat component mount
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  const loadUserData = () => {
+    try {
+      const currentUser = authService.getCurrentUser();
+      
+      if (currentUser) {
+        setUserData({
+          displayName: currentUser.displayName || 'User',
+          email: currentUser.email || 'No email',
+          photoURL: currentUser.photoURL
+        });
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+      Alert.alert('Error', 'Failed to load user data');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogout = () => {
     Alert.alert(
@@ -40,24 +70,31 @@ export default function ProfileScreen({ navigation }) {
           style: "destructive",
           onPress: async () => {
             try {
-              // 1. Proses Logout Firebase
-              const auth = getAuth();
-              await signOut(auth);
-
-              // 2. Navigasi ke Halaman Login & Hapus History
-              // Menggunakan 'reset' agar user tidak bisa tekan tombol back ke profile
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'Login' }], // <--- Pastikan nama ini sesuai dengan Stack Navigator Anda
-              });
+              const result = await authService.signOut();
+              
+              if (result.success) {
+                // Navigasi ke Halaman Login & Hapus History
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: 'Login' }],
+                });
+              } else {
+                Alert.alert("Error", result.error || "Failed to logout");
+              }
               
             } catch (error) {
-              Alert.alert("Error", "Gagal logout: " + error.message);
+              Alert.alert("Error", "Failed to logout: " + error.message);
             }
           }
         }
       ]
     );
+  };
+
+  // Get initial dari display name
+  const getInitial = (name) => {
+    if (!name) return '?';
+    return name.charAt(0).toUpperCase();
   };
 
   // Komponen Menu Item
@@ -81,6 +118,14 @@ export default function ProfileScreen({ navigation }) {
     </TouchableOpacity>
   );
 
+  if (loading) {
+    return (
+      <View style={[styles.mainContainer, styles.centerContent]}>
+        <ActivityIndicator size="large" color={COLORS.primarySolid} />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.mainContainer}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.primarySolid} />
@@ -93,16 +138,36 @@ export default function ProfileScreen({ navigation }) {
         {/* HEADER SECTION */}
         <View style={styles.headerContainer}>
           <View style={styles.profileInfo}>
+            {/* Avatar - bisa pakai foto atau initial */}
             <View style={styles.avatarContainer}>
-              <Text style={styles.avatarText}>S</Text>
+              {userData.photoURL ? (
+                <Image 
+                  source={{ uri: userData.photoURL }} 
+                  style={styles.avatarImage}
+                />
+              ) : (
+                <Text style={styles.avatarText}>
+                  {getInitial(userData.displayName)}
+                </Text>
+              )}
             </View>
+            
+            {/* Name & Email */}
             <View style={styles.nameContainer}>
-              <Text style={styles.nameText}>Sarah Johnson</Text>
-              <Text style={styles.emailText}>sarah.johnson@email.com</Text>
+              <Text style={styles.nameText} numberOfLines={1}>
+                {userData.displayName}
+              </Text>
+              <Text style={styles.emailText} numberOfLines={1}>
+                {userData.email}
+              </Text>
             </View>
           </View>
 
-          <TouchableOpacity style={styles.editButton} activeOpacity={0.8}>
+          <TouchableOpacity 
+            style={styles.editButton} 
+            activeOpacity={0.8}
+            onPress={() => Alert.alert('Coming Soon', 'Edit profile feature will be available soon!')}
+          >
             <Text style={styles.editButtonText}>Edit Profile</Text>
           </TouchableOpacity>
         </View>
@@ -112,15 +177,42 @@ export default function ProfileScreen({ navigation }) {
           
           <Text style={styles.sectionHeader}>Budget & Categories</Text>
           <View style={styles.card}>
-            <MenuItem icon="account-balance-wallet" title="Set Budget" subtitle="Define your monthly spending limits" />
-            <MenuItem icon="label" title="Manage Categories" subtitle="Customize your expense categories" isLast={true} />
+            <MenuItem 
+              icon="account-balance-wallet" 
+              title="Set Budget" 
+              subtitle="Define your monthly spending limits"
+              onPress={() => navigation.navigate('SetBudget')}
+            />
+            <MenuItem 
+              icon="label" 
+              title="Manage Categories" 
+              subtitle="Customize your expense categories" 
+              isLast={true}
+              onPress={() => Alert.alert('Coming Soon', 'This feature will be available soon!')}
+            />
           </View>
 
           <Text style={styles.sectionHeader}>Reports & Analytics</Text>
           <View style={styles.card}>
-            <MenuItem icon="bar-chart" title="Spending Reports" subtitle="View your expenses over time" />
-            <MenuItem icon="insights" title="Financial Insights" subtitle="Get smart suggestions and trends" />
-            <MenuItem icon="file-download" title="Export Data" subtitle="Download your transaction history" isLast={true} />
+            <MenuItem 
+              icon="bar-chart" 
+              title="Spending Reports" 
+              subtitle="View your expenses over time"
+              onPress={() => Alert.alert('Coming Soon', 'This feature will be available soon!')}
+            />
+            <MenuItem 
+              icon="insights" 
+              title="Financial Insights" 
+              subtitle="Get smart suggestions and trends"
+              onPress={() => Alert.alert('Coming Soon', 'This feature will be available soon!')}
+            />
+            <MenuItem 
+              icon="file-download" 
+              title="Export Data" 
+              subtitle="Download your transaction history" 
+              isLast={true}
+              onPress={() => Alert.alert('Coming Soon', 'This feature will be available soon!')}
+            />
           </View>
 
           <Text style={styles.sectionHeader}>Settings</Text>
@@ -129,14 +221,29 @@ export default function ProfileScreen({ navigation }) {
               icon="notifications" 
               title="Notifications" 
               subtitle="Manage your alerts and reminders"
-              onPress={() => navigation.navigate('Notifications')} 
+              onPress={() => navigation.navigate('Notifications')}
             />
-            <MenuItem icon="attach-money" title="Currency" subtitle="Set your default currency (IDR)" />
-            <MenuItem icon="nights-stay" title="Appearance" subtitle="Switch between light and dark mode" isLast={true} />
+            <MenuItem 
+              icon="attach-money" 
+              title="Currency" 
+              subtitle="Set your default currency (IDR)"
+              onPress={() => Alert.alert('Coming Soon', 'This feature will be available soon!')}
+            />
+            <MenuItem 
+              icon="nights-stay" 
+              title="Appearance" 
+              subtitle="Switch between light and dark mode" 
+              isLast={true}
+              onPress={() => Alert.alert('Coming Soon', 'This feature will be available soon!')}
+            />
           </View>
 
           <View style={styles.actionsContainer}>
-            <TouchableOpacity style={styles.actionCard} activeOpacity={0.7}>
+            <TouchableOpacity 
+              style={styles.actionCard} 
+              activeOpacity={0.7}
+              onPress={() => Alert.alert('Coming Soon', 'This feature will be available soon!')}
+            >
               <Text style={[styles.actionText, { color: COLORS.danger }]}>Change Password</Text>
               <MaterialIcons name="chevron-right" size={24} color={COLORS.danger} />
             </TouchableOpacity>
@@ -163,6 +270,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   scrollView: { flex: 1 },
   headerContainer: {
     paddingTop: 60,
@@ -183,20 +294,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 44,
   },
   avatarText: {
     fontSize: 36,
     fontWeight: 'bold',
     color: COLORS.primaryIconText,
   },
-  nameContainer: { flex: 1, justifyContent: 'center' },
+  nameContainer: { 
+    flex: 1, 
+    justifyContent: 'center',
+    paddingRight: 8,
+  },
   nameText: {
     fontSize: 20,
     fontWeight: 'bold',
     color: COLORS.white,
     marginBottom: 4,
   },
-  emailText: { fontSize: 16, color: 'rgba(255, 255, 255, 0.9)' },
+  emailText: { 
+    fontSize: 16, 
+    color: 'rgba(255, 255, 255, 0.9)',
+  },
   editButton: {
     backgroundColor: COLORS.white,
     height: 48,

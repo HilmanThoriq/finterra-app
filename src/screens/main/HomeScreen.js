@@ -86,10 +86,10 @@ export default function HomeScreen({ navigation }) {
   // Get category icon and color - FIXED to match database structure
   const getCategoryStyle = (category) => {
     const styles = {
-      'food': { icon: 'fast-food', color: '#E0F2F1', iconColor: '#009688', label: 'Food' },
-      'transport': { icon: 'train', color: '#E3F2FD', iconColor: '#2196F3', label: 'Transport' },
-      'shopping': { icon: 'cart', color: '#FFF3E0', iconColor: '#FF9800', label: 'Shopping' },
-      'entertainment': { icon: 'game-controller', color: '#F3E5F5', iconColor: '#9C27B0', label: 'Entertainment' },
+      'food': { icon: 'fast-food', color: '#FEE2E2', iconColor: '#FF6B6B', label: 'Food' },
+      'transport': { icon: 'train', color: '#DBEAFE', iconColor: '#4D9FFF', label: 'Transport' },
+      'shopping': { icon: 'cart', color:'#FEF3C7', iconColor: '#FFB84D', label: 'Shopping' },
+      'entertainment': { icon: 'game-controller', color: '#F3E5F5', iconColor: '#9B59B6', label: 'Entertainment' },
       'health': { icon: 'fitness', color: '#E8F5E9', iconColor: '#4CAF50', label: 'Health' },
       'bills': { icon: 'document-text', color: '#F5F5F5', iconColor: '#757575', label: 'Bills' },
       'others': { icon: 'ellipsis-horizontal-circle', color: '#E0F2F1', iconColor: Colors.primary, label: 'Others' },
@@ -186,7 +186,7 @@ export default function HomeScreen({ navigation }) {
           
           {percentage > 0.7 && monthlyBudget > 0 && (
             <View style={styles.warningContainer}>
-              <Ionicons name="warning" size={16} color="#F59E0B" />
+              <Ionicons name="warning" size={16} color="#FF6B6B" />
               <Text style={styles.warningText}>Almost at your limit</Text>
             </View>
           )}
@@ -318,7 +318,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   budgetCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: Colors.primaryLight,
     marginHorizontal: 24,
     borderRadius: 20,
     padding: 24,
@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
   budgetLabel: {
     fontSize: 12,
     fontWeight: 'bold',
-    color: '#9CA3AF',
+    color: Colors.textPrimary,
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
@@ -362,7 +362,7 @@ const styles = StyleSheet.create({
   },
   budgetRemaining: {
     fontSize: 14,
-    color: '#6B7280',
+    color: Colors.textPrimary,
     marginBottom: 16,
   },
   progressTrack: {
@@ -383,7 +383,7 @@ const styles = StyleSheet.create({
   },
   warningText: {
     fontSize: 12,
-    color: '#F59E0B',
+    color: '#FF6B6B',
     fontWeight: '600',
     marginLeft: 6,
   },

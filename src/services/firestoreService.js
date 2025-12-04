@@ -1,11 +1,14 @@
-import { 
-  collection, 
-  query, 
-  where, 
-  getDocs, 
-  doc, 
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
   getDoc,
+  setDoc,
   addDoc,
+  updateDoc,
+  deleteDoc,
   orderBy,
   limit,
   Timestamp
@@ -13,6 +16,55 @@ import {
 import { db } from '../config/firebase';
 
 class FirestoreService {
+  // ========== BUDGET FUNCTIONS ==========
+
+  // Set or Update Monthly Budget
+  async setMonthlyBudget(userId, amount) {
+    try {
+      const now = new Date();
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+      await setDoc(doc(db, 'budgets', userId), {
+        amount: amount,
+        month: currentMonth,
+        updatedAt: Timestamp.now()
+      });
+
+      return {
+        success: true,
+        message: 'Budget saved successfully!'
+      };
+    } catch (error) {
+      console.error('Error setting budget:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  // Get Monthly Budget
+  async getMonthlyBudget(userId) {
+    try {
+      const budgetDoc = await getDoc(doc(db, 'budgets', userId));
+
+      if (budgetDoc.exists()) {
+        const data = budgetDoc.data();
+        const now = new Date();
+        const budgetMonth = data.month;
+        const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+        if (budgetMonth === currentMonth) {
+          return data.amount || 0;
+        }
+      }
+      return 0;
+    } catch (error) {
+      console.error('Error getting budget:', error);
+      return 0;
+    }
+  }
+
   // ========== ADD EXPENSE ==========
   async addExpense(userId, expenseData) {
     try {
@@ -31,7 +83,7 @@ class FirestoreService {
       };
 
       const docRef = await addDoc(collection(db, 'expenses'), expense);
-      
+
       return {
         success: true,
         id: docRef.id,
@@ -46,9 +98,89 @@ class FirestoreService {
     }
   }
 
+  // ========== GET EXPENSE DETAIL ==========
+  async getExpenseById(expenseId) {
+    try {
+      const expenseDoc = await getDoc(doc(db, 'expenses', expenseId));
+
+      if (expenseDoc.exists()) {
+        const data = expenseDoc.data();
+        return {
+          success: true,
+          expense: {
+            id: expenseDoc.id,
+            ...data,
+            date: data.date?.toDate()
+          }
+        };
+      } else {
+        return {
+          success: false,
+          error: 'Expense not found'
+        };
+      }
+    } catch (error) {
+      console.error('Error getting expense:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  // ========== UPDATE EXPENSE ==========
+  async updateExpense(expenseId, expenseData) {
+    try {
+      const expenseRef = doc(db, 'expenses', expenseId);
+
+      const updateData = {
+        amount: expenseData.amount,
+        category: expenseData.category,
+        locationName: expenseData.locationName || '',
+        location: expenseData.location ? {
+          latitude: expenseData.location.latitude,
+          longitude: expenseData.location.longitude
+        } : null,
+        note: expenseData.note || '',
+        date: Timestamp.fromDate(expenseData.date),
+        updatedAt: Timestamp.now()
+      };
+
+      await updateDoc(expenseRef, updateData);
+
+      return {
+        success: true,
+        message: 'Expense updated successfully!'
+      };
+    } catch (error) {
+      console.error('Error updating expense:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  // ========== DELETE EXPENSE ==========
+  async deleteExpense(expenseId) {
+    try {
+      await deleteDoc(doc(db, 'expenses', expenseId));
+
+      return {
+        success: true,
+        message: 'Expense deleted successfully!'
+      };
+    } catch (error) {
+      console.error('Error deleting expense:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
   // ========== HISTORY FUNCTIONS ==========
-  
-  // Get all expenses for history page
+
   async getAllExpenses(userId, filters = {}) {
     try {
       let q = query(
@@ -68,16 +200,47 @@ class FirestoreService {
         });
       });
 
-      // Sort by date (newest first)
       expenses.sort((a, b) => b.date - a.date);
 
-      // Apply filters in memory
+      // Apply filters
       if (filters.category && filters.category !== 'All') {
-        if (filters.category === 'This Month') {
-          const now = new Date();
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        // NEW: Today filter
+        if (filters.category === 'Today') {
+          const tomorrow = new Date(today);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          expenses = expenses.filter(exp => exp.date >= today && exp.date < tomorrow);
+        }
+        // NEW: Yesterday filter
+        else if (filters.category === 'Yesterday') {
+          const yesterday = new Date(today);
+          yesterday.setDate(yesterday.getDate() - 1);
+          expenses = expenses.filter(exp => exp.date >= yesterday && exp.date < today);
+        }
+        // NEW: This Week filter
+        else if (filters.category === 'This Week') {
+          const startOfWeek = new Date(today);
+          const day = startOfWeek.getDay();
+          const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1); // Monday as first day
+          startOfWeek.setDate(diff);
+          expenses = expenses.filter(exp => exp.date >= startOfWeek);
+        }
+        // Existing: This Month filter
+        else if (filters.category === 'This Month') {
           const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
           expenses = expenses.filter(exp => exp.date >= startOfMonth);
-        } else {
+        }
+        // Prev Month filter
+        else if (filters.category === 'Prev Month') {
+          const now = new Date();
+          const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          const endOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+          expenses = expenses.filter(exp => exp.date >= startOfPrevMonth && exp.date <= endOfPrevMonth);
+        }
+        // Category filter
+        else {
           expenses = expenses.filter(exp => exp.category === filters.category.toLowerCase());
         }
       }
@@ -85,7 +248,7 @@ class FirestoreService {
       // Apply search query
       if (filters.searchQuery) {
         const query = filters.searchQuery.toLowerCase();
-        expenses = expenses.filter(exp => 
+        expenses = expenses.filter(exp =>
           (exp.locationName?.toLowerCase().includes(query)) ||
           (exp.note?.toLowerCase().includes(query)) ||
           (exp.category?.toLowerCase().includes(query))
@@ -99,21 +262,19 @@ class FirestoreService {
     }
   }
 
-  // Get history summary (total spent and count for filtered period)
   async getHistorySummary(userId, filters = {}) {
     try {
       const expenses = await this.getAllExpenses(userId, filters);
-      
+
       const totalSpent = expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
       const transactionCount = expenses.length;
 
-      // Get date range
       let startDate = null;
       let endDate = null;
-      
+
       if (expenses.length > 0) {
-        endDate = expenses[0].date; // Newest
-        startDate = expenses[expenses.length - 1].date; // Oldest
+        endDate = expenses[0].date;
+        startDate = expenses[expenses.length - 1].date;
       }
 
       return {
@@ -134,30 +295,7 @@ class FirestoreService {
   }
 
   // ========== HOME FUNCTIONS ==========
-  
-  // Get user's monthly budget
-  async getMonthlyBudget(userId) {
-    try {
-      const budgetDoc = await getDoc(doc(db, 'budgets', userId));
-      
-      if (budgetDoc.exists()) {
-        const data = budgetDoc.data();
-        const now = new Date();
-        const budgetMonth = data.month;
-        const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-        
-        if (budgetMonth === currentMonth) {
-          return data.amount || 0;
-        }
-      }
-      return 0;
-    } catch (error) {
-      console.error('Error getting budget:', error);
-      return 0;
-    }
-  }
 
-  // Get total spent for current month
   async getTotalSpent(userId) {
     try {
       const now = new Date();
@@ -171,11 +309,11 @@ class FirestoreService {
 
       const snapshot = await getDocs(q);
       let total = 0;
-      
+
       snapshot.forEach((doc) => {
         const data = doc.data();
         const expenseDate = data.date?.toDate();
-        
+
         if (expenseDate && expenseDate >= startOfMonth && expenseDate <= endOfMonth) {
           total += data.amount || 0;
         }
@@ -188,7 +326,6 @@ class FirestoreService {
     }
   }
 
-  // Get total transactions count (all time)
   async getTotalTransactions(userId) {
     try {
       const q = query(
@@ -204,7 +341,6 @@ class FirestoreService {
     }
   }
 
-  // Get top category
   async getTopCategory(userId) {
     try {
       const q = query(
@@ -218,14 +354,14 @@ class FirestoreService {
       snapshot.forEach((doc) => {
         const data = doc.data();
         const category = data.category || 'others';
-        
+
         if (!categoryData[category]) {
           categoryData[category] = {
             count: 0,
             totalAmount: 0
           };
         }
-        
+
         categoryData[category].count += 1;
         categoryData[category].totalAmount += (data.amount || 0);
       });
@@ -237,12 +373,12 @@ class FirestoreService {
       const maxCount = Math.max(...Object.values(categoryData).map(d => d.count));
       const topCategories = Object.entries(categoryData)
         .filter(([_, data]) => data.count === maxCount);
-      
-      const topCategory = topCategories.reduce((max, [cat, data]) => 
-        data.totalAmount > max.totalAmount 
-          ? { name: cat, amount: data.totalAmount, count: data.count } 
+
+      const topCategory = topCategories.reduce((max, [cat, data]) =>
+        data.totalAmount > max.totalAmount
+          ? { name: cat, amount: data.totalAmount, count: data.count }
           : max
-      , { name: topCategories[0][0], amount: topCategories[0][1].totalAmount, count: maxCount });
+        , { name: topCategories[0][0], amount: topCategories[0][1].totalAmount, count: maxCount });
 
       return { name: topCategory.name, amount: topCategory.amount };
     } catch (error) {
@@ -251,7 +387,6 @@ class FirestoreService {
     }
   }
 
-  // Get daily average
   async getDailyAverage(userId) {
     try {
       const now = new Date();
@@ -269,7 +404,7 @@ class FirestoreService {
       snapshot.forEach((doc) => {
         const data = doc.data();
         const expenseDate = data.date?.toDate();
-        
+
         if (expenseDate && expenseDate >= startOfMonth) {
           total += data.amount || 0;
         }
@@ -282,7 +417,6 @@ class FirestoreService {
     }
   }
 
-  // Get recent transactions (last 3)
   async getRecentTransactions(userId) {
     try {
       const q = query(
@@ -310,7 +444,6 @@ class FirestoreService {
     }
   }
 
-  // Get all home data in one call
   async getHomeData(userId) {
     try {
       const [

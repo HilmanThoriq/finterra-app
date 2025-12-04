@@ -19,7 +19,7 @@ import Colors from '../../constants/Colors';
 
 export default function HistoryScreen({ navigation }) {
   const { user } = useAuth();
-  
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -32,7 +32,7 @@ export default function HistoryScreen({ navigation }) {
     endDate: null
   });
 
-  const filters = ['All', 'This Month', 'food', 'shopping', 'transport', 'entertainment', 'health', 'bills'];
+  const filters = ['All', 'Today', 'Yesterday', 'This Week', 'This Month', 'food', 'shopping', 'transport', 'entertainment', 'health', 'bills'];
 
   useEffect(() => {
     if (user?.uid) {
@@ -43,6 +43,8 @@ export default function HistoryScreen({ navigation }) {
   // Reload when screen comes into focus
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
+      setSelectedFilter('All');
+      setSearchQuery('');
       if (user?.uid) {
         loadHistoryData();
       }
@@ -60,7 +62,7 @@ export default function HistoryScreen({ navigation }) {
   const loadHistoryData = async () => {
     try {
       setLoading(true);
-      
+
       const filters = {
         category: selectedFilter,
         searchQuery: searchQuery.trim()
@@ -137,20 +139,32 @@ export default function HistoryScreen({ navigation }) {
 
   // Format time
   const formatTime = (date) => {
-    return new Date(date).toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
+    return new Date(date).toLocaleTimeString('en-US', {
+      hour: '2-digit',
       minute: '2-digit',
-      hour12: false 
+      hour12: false
     });
   };
 
   // Format date range
   const formatDateRange = () => {
     if (!summary.startDate || !summary.endDate) return '-';
-    
+
+    // Check if filtering by special categories
+    if (selectedFilter === 'Today') {
+      return 'Today';
+    } else if (selectedFilter === 'Yesterday') {
+      return 'Yesterday';
+    } else if (selectedFilter === 'This Week') {
+      return 'This Week';
+    } else if (selectedFilter === 'This Month') {
+      const now = new Date();
+      return now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    }
+
     const start = new Date(summary.startDate);
     const end = new Date(summary.endDate);
-    
+
     return `${start.getDate()} ${start.toLocaleDateString('en-US', { month: 'short' })} - ${end.getDate()} ${end.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`;
   };
 
@@ -174,7 +188,7 @@ export default function HistoryScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
-      
+
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>History</Text>
@@ -200,8 +214,8 @@ export default function HistoryScreen({ navigation }) {
         </View>
       </View>
 
-      <ScrollView 
-        showsVerticalScrollIndicator={false} 
+      <ScrollView
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} />
@@ -251,7 +265,7 @@ export default function HistoryScreen({ navigation }) {
             <Ionicons name="receipt-outline" size={64} color={Colors.textTertiary} />
             <Text style={styles.emptyText}>No transactions found</Text>
             <Text style={styles.emptySubtext}>
-              {searchQuery || selectedFilter !== 'All' 
+              {searchQuery || selectedFilter !== 'All'
                 ? 'Try adjusting your filters or search query'
                 : 'Start tracking your expenses to see them here'}
             </Text>

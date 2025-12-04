@@ -1,32 +1,53 @@
-// src/screens/main/ExpenseDetailScreen.js
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Alert } from 'react-native';
+// src/screens/main/ExpenseDetailsScreen.js
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  SafeAreaView,
+  TouchableOpacity,
+  ScrollView,
+  Alert,
+  ActivityIndicator
+} from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '../../constants/Colors';
 import EditExpenseModal from './EditExpenseModal';
+import firestoreService from '../../services/firestoreService';
 
-export default function ExpenseDetailScreen({ navigation, route }) {
-  const { id } = route.params || {};
+export default function ExpenseDetailsScreen({ navigation, route }) {
+  const { expenseId } = route.params || {};
+  const [loading, setLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
-  
-  // Mock data - replace with actual data from Firestore
-  const [expense, setExpense] = useState({
-    id: id || '1',
-    amount: 85000,
-    category: 'food',
-    categoryName: 'Food & Drink',
-    name: 'Starbucks - Grand Indonesia',
-    locationName: 'Starbucks - Grand Indonesia',
-    location: {
-      latitude: -6.195,
-      longitude: 106.823,
-    },
-    date: '2023-09-25T14:30:00',
-    notes: 'Meeting with the team for a quick coffee brainstorming session about the Q4 launch.',
-  });
+  const [expense, setExpense] = useState(null);
 
-  // Get category color based on category name
+  useEffect(() => {
+    if (expenseId) {
+      loadExpenseDetail();
+    }
+  }, [expenseId]);
+
+  const loadExpenseDetail = async () => {
+    try {
+      setLoading(true);
+      const result = await firestoreService.getExpenseById(expenseId);
+
+      if (result.success) {
+        setExpense(result.expense);
+      } else {
+        Alert.alert('Error', result.error);
+        navigation.goBack();
+      }
+    } catch (error) {
+      console.error('Error loading expense:', error);
+      Alert.alert('Error', 'Failed to load expense details');
+      navigation.goBack();
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const getCategoryColor = (category) => {
     const categoryColors = {
       'food': Colors.categoryFood,
@@ -40,19 +61,31 @@ export default function ExpenseDetailScreen({ navigation, route }) {
     return categoryColors[category] || Colors.primary;
   };
 
-  const categoryColor = getCategoryColor(expense.category);
+  const getCategoryName = (category) => {
+    const names = {
+      'food': 'Food',
+      'transport': 'Transport',
+      'shopping': 'Shopping',
+      'entertainment': 'Entertainment',
+      'health': 'Health',
+      'bills': 'Bills',
+      'others': 'Others',
+    };
+    return names[category] || 'Others';
+  };
 
-  const formatDateTime = (dateString) => {
-    const date = new Date(dateString);
-    const options = { 
+  const formatDateTime = (date) => {
+    if (!date) return '-';
+    const d = new Date(date);
+    const options = {
       day: 'numeric',
       month: 'long',
       year: 'numeric',
-      hour: '2-digit', 
+      hour: '2-digit',
       minute: '2-digit',
       hour12: false
     };
-    return date.toLocaleString('en-US', options);
+    return d.toLocaleString('en-US', options);
   };
 
   const handleDelete = () => {
@@ -67,22 +100,65 @@ export default function ExpenseDetailScreen({ navigation, route }) {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            // TODO: Delete from Firestore
-            console.log('Delete expense:', expense.id);
-            navigation.goBack();
+          onPress: async () => {
+            try {
+              const result = await firestoreService.deleteExpense(expenseId);
+
+              if (result.success) {
+                Alert.alert('Success', result.message, [
+                  { text: 'OK', onPress: () => navigation.goBack() }
+                ]);
+              } else {
+                Alert.alert('Error', result.error);
+              }
+            } catch (error) {
+              console.error('Error deleting expense:', error);
+              Alert.alert('Error', 'Failed to delete expense');
+            }
           },
         },
       ]
     );
   };
 
-  const handleUpdateExpense = (updatedExpense) => {
-    // TODO: Update to Firestore
-    setExpense(updatedExpense);
-    console.log('Updated expense:', updatedExpense);
+  const handleUpdateExpense = async (updatedData) => {
+    try {
+      const result = await firestoreService.updateExpense(expenseId, updatedData);
+
+      if (result.success) {
+        // Reload expense detail
+        await loadExpenseDetail();
+        setShowEditModal(false);
+        Alert.alert('Success', result.message);
+      } else {
+        Alert.alert('Error', result.error);
+      }
+    } catch (error) {
+      console.error('Error updating expense:', error);
+      Alert.alert('Error', 'Failed to update expense');
+    }
   };
-  
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={{ marginTop: 16, color: Colors.textTertiary }}>Loading...</Text>
+      </View>
+    );
+  }
+
+  if (!expense) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Ionicons name="alert-circle-outline" size={64} color={Colors.textTertiary} />
+        <Text style={{ marginTop: 16, color: Colors.textTertiary }}>Expense not found</Text>
+      </View>
+    );
+  }
+
+  const categoryColor = getCategoryColor(expense.category);
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
@@ -107,98 +183,122 @@ export default function ExpenseDetailScreen({ navigation, route }) {
         {/* Category Badge */}
         <View style={styles.badgeContainer}>
           <View style={[styles.badge, { backgroundColor: categoryColor + '20' }]}>
-            <Text style={[styles.badgeText, { color: categoryColor }]}>{expense.categoryName}</Text>
+            <Text style={[styles.badgeText, { color: categoryColor }]}>
+              {getCategoryName(expense.category)}
+            </Text>
           </View>
         </View>
 
         {/* Details */}
         <View style={styles.detailsContainer}>
           {/* Location Card with Map */}
-          <View style={styles.locationCard}>
-            <View style={styles.mapContainer}>
-              <MapView
-                provider={PROVIDER_GOOGLE}
-                style={styles.map}
-                initialRegion={{
-                  latitude: expense.location.latitude,
-                  longitude: expense.location.longitude,
-                  latitudeDelta: 0.01,
-                  longitudeDelta: 0.01,
-                }}
-                scrollEnabled={false}
-                zoomEnabled={false}
-                rotateEnabled={false}
-                pitchEnabled={false}
-              >
-                <Marker
-                  coordinate={{
+          {expense.location && (
+            <View style={styles.locationCard}>
+              <View style={styles.mapContainer}>
+                <MapView
+                  provider={PROVIDER_GOOGLE}
+                  style={styles.map}
+                  initialRegion={{
                     latitude: expense.location.latitude,
                     longitude: expense.location.longitude,
+                    latitudeDelta: 0.0065,
+                    longitudeDelta: 0.0065,
                   }}
-                  pinColor={categoryColor}
-                />
-              </MapView>
-            </View>
-            <View style={styles.locationInfo}>
-              <Text style={styles.locationName}>{expense.locationName}</Text>
-              <Text style={styles.locationCoordinates}>
-                {expense.location.latitude.toFixed(4)}, {expense.location.longitude.toFixed(4)}
-              </Text>
-              <TouchableOpacity 
-                style={[styles.viewMapButton, { backgroundColor: categoryColor }]}
-                onPress={() => {
-                  // TODO: Open external map app or full screen map
-                  Alert.alert('Open Map', 'This will open the map application');
-                }}
-              >
+                  scrollEnabled={true}
+                  zoomEnabled={true}
+                  rotateEnabled={false}
+                  pitchEnabled={false}
+                >
+                  <Marker
+                    coordinate={{
+                      latitude: expense.location.latitude,
+                      longitude: expense.location.longitude,
+                    }}
+                    pinColor={categoryColor}
+                  />
+                </MapView>
+              </View>
+              <View style={styles.locationInfo}>
+                <Text style={styles.locationName}>
+                  {expense.locationName || 'Location'}
+                </Text>
+                <Text style={styles.locationCoordinates}>
+                  {expense.location.latitude.toFixed(6)}, {expense.location.longitude.toFixed(6)}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.viewMapButton, { backgroundColor: categoryColor }]}
+                  onPress={() =>
+                    navigation.navigate("MainApp", {
+                      screen: "Map",
+                      params: {
+                        lat: expense.location.latitude,
+                        lng: expense.location.longitude
+                      }
+                    })
+                  }
+                >
                 <Text style={styles.viewMapText}>View on Map</Text>
                 <Ionicons name="chevron-forward" size={16} color={Colors.surface} />
               </TouchableOpacity>
             </View>
-          </View>
-
-          {/* Date & Time */}
-          <View style={styles.detailRow}>
-            <View style={[styles.detailIcon, { backgroundColor: categoryColor + '20' }]}>
-              <Ionicons name="calendar-outline" size={24} color={categoryColor} />
-            </View>
-            <View style={styles.detailContent}>
-              <Text style={styles.detailLabel}>Date & Time</Text>
-              <Text style={styles.detailText}>{formatDateTime(expense.date)}</Text>
-            </View>
-          </View>
-
-          {/* Notes */}
-          {expense.notes && (
-            <View style={styles.notesCard}>
-              <View style={[styles.detailIcon, { backgroundColor: categoryColor + '20' }]}>
-                <Ionicons name="document-text-outline" size={24} color={categoryColor} />
-              </View>
-              <View style={styles.notesContent}>
-                <Text style={styles.notesTitle}>Notes</Text>
-                <Text style={styles.notesText}>{expense.notes}</Text>
-              </View>
             </View>
           )}
+
+        {/* Location Name Only (if no coordinates) */}
+        {!expense.location && expense.locationName && (
+          <View style={styles.detailRow}>
+            <View style={[styles.detailIcon, { backgroundColor: categoryColor + '20' }]}>
+              <Ionicons name="location-outline" size={24} color={categoryColor} />
+            </View>
+            <View style={styles.detailContent}>
+              <Text style={styles.detailLabel}>Location</Text>
+              <Text style={styles.detailText}>{expense.locationName}</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Date & Time */}
+        <View style={styles.detailRow}>
+          <View style={[styles.detailIcon, { backgroundColor: categoryColor + '20' }]}>
+            <Ionicons name="calendar-outline" size={24} color={categoryColor} />
+          </View>
+          <View style={styles.detailContent}>
+            <Text style={styles.detailLabel}>Date & Time</Text>
+            <Text style={styles.detailText}>{formatDateTime(expense.date)}</Text>
+          </View>
         </View>
-      </ScrollView>
 
-      {/* Delete Button */}
-      <View style={styles.bottomButton}>
-        <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
-          <Ionicons name="trash-outline" size={20} color={Colors.surface} style={{ marginRight: 8 }} />
-          <Text style={styles.deleteButtonText}>Delete Expense</Text>
-        </TouchableOpacity>
+        {/* Notes */}
+        {expense.note && (
+          <View style={styles.notesCard}>
+            <View style={[styles.detailIcon, { backgroundColor: categoryColor + '20' }]}>
+              <Ionicons name="document-text-outline" size={24} color={categoryColor} />
+            </View>
+            <View style={styles.notesContent}>
+              <Text style={styles.notesTitle}>Notes</Text>
+              <Text style={styles.notesText}>{expense.note}</Text>
+            </View>
+          </View>
+        )}
       </View>
+    </ScrollView>
 
-      {/* Edit Modal */}
-      <EditExpenseModal
-        visible={showEditModal}
-        onClose={() => setShowEditModal(false)}
-        expense={expense}
-        onUpdate={handleUpdateExpense}
-      />
-    </SafeAreaView>
+      {/* Delete Button */ }
+  <View style={styles.bottomButton}>
+    <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
+      <Ionicons name="trash-outline" size={20} color={Colors.surface} style={{ marginRight: 8 }} />
+      <Text style={styles.deleteButtonText}>Delete Expense</Text>
+    </TouchableOpacity>
+  </View>
+
+  {/* Edit Modal */ }
+  <EditExpenseModal
+    visible={showEditModal}
+    onClose={() => setShowEditModal(false)}
+    expense={expense}
+    onUpdate={handleUpdateExpense}
+  />
+    </SafeAreaView >
   );
 }
 
@@ -279,7 +379,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   locationName: {
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: 'bold',
     color: Colors.textPrimary,
     marginBottom: 4,

@@ -10,6 +10,7 @@ import {
   ScrollView,
   Alert,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -27,6 +28,7 @@ export default function EditExpenseModal({ visible, onClose, expense, onUpdate }
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [showMapModal, setShowMapModal] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState(null);
+  const [saving, setSaving] = useState(false);
   const [currentRegion, setCurrentRegion] = useState({
     latitude: -6.200,
     longitude: 106.816,
@@ -78,30 +80,32 @@ export default function EditExpenseModal({ visible, onClose, expense, onUpdate }
     });
   };
 
-  const handleUpdate = () => {
+  const handleUpdate = async () => {
     if (!amount || !selectedCategory) {
       Alert.alert('Error', 'Please fill in amount and select category');
       return;
     }
 
-    const updatedExpense = {
-      ...expense,
-      amount: parseFloat(amount.replace(/\./g, '')),
-      category: selectedCategory,
-      locationName,
-      location: selectedLocation,
-      note,
-      date: date.toISOString(),
-    };
+    setSaving(true);
 
-    // Call onUpdate callback if provided
-    if (onUpdate) {
-      onUpdate(updatedExpense);
+    try {
+      const updatedData = {
+        amount: parseFloat(amount.replace(/\./g, '')),
+        category: selectedCategory,
+        locationName: locationName.trim(),
+        location: selectedLocation,
+        note: note.trim(),
+        date: date,
+      };
+
+      // Call onUpdate callback
+      await onUpdate(updatedData);
+    } catch (error) {
+      console.error('Error updating expense:', error);
+      Alert.alert('Error', 'Failed to update expense');
+    } finally {
+      setSaving(false);
     }
-
-    Alert.alert('Success', 'Expense updated successfully', [
-      { text: 'OK', onPress: onClose }
-    ]);
   };
 
   const formatNumber = (text) => {
@@ -277,8 +281,8 @@ export default function EditExpenseModal({ visible, onClose, expense, onUpdate }
               <View style={styles.sectionLabel}>
                 <Text style={styles.sectionLabel}>Note (Optional)</Text>
               </View>
-              <View style={styles.inputSection}>
-                <Ionicons name="document-text-outline" size={20} color={Colors.primary} />
+              <View style={[styles.inputSection, styles.noteSection]}>
+                <Ionicons name="document-text-outline" size={20} color={Colors.primary} style={{ marginTop: 22 }} />
                 <TextInput
                   style={[styles.input, styles.noteInput]}
                   placeholder="Add a note... (e.g., Lunch with client)"
@@ -296,13 +300,19 @@ export default function EditExpenseModal({ visible, onClose, expense, onUpdate }
             <TouchableOpacity 
               style={[
                 styles.saveButton,
-                (!amount || !selectedCategory) && styles.saveButtonDisabled
+                (!amount || !selectedCategory || saving) && styles.saveButtonDisabled
               ]}
               onPress={handleUpdate}
-              disabled={!amount || !selectedCategory}
+              disabled={!amount || !selectedCategory || saving}
             >
-              <Ionicons name="save-outline" size={20} color={Colors.surface} />
-              <Text style={styles.saveButtonText}>Update Expense</Text>
+              {saving ? (
+                <ActivityIndicator color={Colors.surface} />
+              ) : (
+                <>
+                  <Ionicons name="save-outline" size={20} color={Colors.surface} />
+                  <Text style={styles.saveButtonText}>Update Expense</Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -496,7 +506,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.primary,
   },
- inputSection: {
+  inputSection: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.background,
@@ -515,6 +525,10 @@ const styles = StyleSheet.create({
   noteInput: {
     minHeight: 60,
     paddingTop: 24,
+  },
+  noteSection: {
+    alignItems: 'flex-start',
+    minHeight: 100,
   },
   mapButton: {
     flexDirection: 'row',

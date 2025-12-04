@@ -54,7 +54,7 @@ export default function AppNavigator() {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
 
-        {/* USER BELUM LOGIN */}
+        {/* USER IS NOT LOGIN */}
         {!user && (
           <>
             {isFirstLaunch && (
@@ -66,7 +66,7 @@ export default function AppNavigator() {
           </>
         )}
 
-        {/* USER SUDAH LOGIN */}
+        {/* USER IS LOGIN */}
         {user && (
           <>
             <Stack.Screen name="MainApp" component={MainTabNavigator} />

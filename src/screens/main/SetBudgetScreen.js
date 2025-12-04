@@ -1,22 +1,99 @@
 // src/screens/main/SetBudgetScreen.js
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, TextInput, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  SafeAreaView,
+  TouchableOpacity,
+  TextInput,
+  Alert,
+  ActivityIndicator
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '../../constants/Colors';
+import authService from '../../services/authService';
+import firestoreService from '../../services/firestoreService';
 
 export default function SetBudgetScreen({ navigation }) {
   const [budget, setBudget] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [currentBudget, setCurrentBudget] = useState(0);
+
   const suggestions = [500000, 1000000, 1500000, 2000000, 5000000];
+
+  // Load existing budget saat component mount
+  useEffect(() => {
+    loadExistingBudget();
+  }, []);
+
+  const loadExistingBudget = async () => {
+    try {
+      const user = authService.getCurrentUser();
+      if (!user) {
+        Alert.alert('Error', 'Please login first');
+        navigation.goBack();
+        return;
+      }
+
+      const existingBudget = await firestoreService.getMonthlyBudget(user.uid);
+
+      if (existingBudget > 0) {
+        setCurrentBudget(existingBudget);
+        setBudget(formatNumber(existingBudget.toString()));
+      } else {
+        setCurrentBudget(0);
+        setBudget('');
+      }
+    } catch (error) {
+      console.error('Error loading budget:', error);
+      Alert.alert('Error', 'Failed to load budget');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const dailyBudget = budget ? Math.floor(parseInt(budget.replace(/\./g, '')) / 30) : 0;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!budget || parseInt(budget.replace(/\./g, '')) === 0) {
       Alert.alert('Error', 'Please enter a valid budget amount');
       return;
     }
-    // TODO: Save to Firestore
-    navigation.goBack();
+
+    setSaving(true);
+
+    try {
+      const user = authService.getCurrentUser();
+      if (!user) {
+        Alert.alert('Error', 'Please login first');
+        return;
+      }
+
+      const budgetAmount = parseInt(budget.replace(/\./g, ''));
+      const result = await firestoreService.setMonthlyBudget(user.uid, budgetAmount);
+
+      if (result.success) {
+        Alert.alert(
+          'Success',
+          result.message,
+          [
+            {
+              text: 'OK',
+              onPress: () => navigation.goBack()
+            }
+          ]
+        );
+      } else {
+        Alert.alert('Error', result.error || 'Failed to save budget');
+      }
+    } catch (error) {
+      console.error('Error saving budget:', error);
+      Alert.alert('Error', 'Failed to save budget');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const formatNumber = (text) => {
@@ -28,6 +105,15 @@ export default function SetBudgetScreen({ navigation }) {
     const date = new Date();
     return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.container, styles.centerContent]}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={styles.loadingText}>Loading budget...</Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -41,21 +127,37 @@ export default function SetBudgetScreen({ navigation }) {
       </View>
 
       <View style={styles.content}>
+        {/* Current Budget Display */}
+        {currentBudget > 0 && (
+          <View style={styles.currentBudgetCard}>
+            <Text style={styles.currentBudgetLabel}>Current Budget for {getCurrentMonthYear()}</Text>
+            <Text style={styles.currentBudgetAmount}>
+              Rp {currentBudget.toLocaleString('id-ID')}
+            </Text>
+            <Text style={styles.currentBudgetHint}>You can update your budget below</Text>
+          </View>
+        )}
+
         {/* Budget Input */}
         <View style={styles.inputSection}>
           <View style={styles.inputWrapper}>
-            <Text style={styles.currencyPrefix}>Rp</Text>
             <TextInput
               style={styles.budgetInput}
-              placeholder="0"
+              placeholder="Rp 0"  
               placeholderTextColor={Colors.textTertiary}
               keyboardType="numeric"
-              value={budget}
-              onChangeText={(text) => setBudget(formatNumber(text))}
+              value={budget ? `Rp ${budget}` : ''} 
+              onChangeText={(text) => {
+                const cleaned = text.replace('Rp', '').trim();
+                setBudget(formatNumber(cleaned));
+              }}
             />
           </View>
           <Text style={styles.inputLabel}>
-            Enter your monthly budget in {getCurrentMonthYear()}
+            {currentBudget > 0
+              ? `Update your budget for ${getCurrentMonthYear()}`
+              : `Enter your monthly budget for ${getCurrentMonthYear()}`
+            }
           </Text>
         </View>
 
@@ -81,19 +183,31 @@ export default function SetBudgetScreen({ navigation }) {
         </View>
 
         {/* Daily Budget Preview */}
-        <View style={styles.previewCard}>
-          <Text style={styles.previewLabel}>Daily Budget Estimation</Text>
-          <Text style={styles.previewAmount}>Rp {dailyBudget.toLocaleString('id-ID')}</Text>
-          <Text style={styles.previewDesc}>
-            Your daily spending limit will be approximately this amount, based on a 30-day month.
-          </Text>
-        </View>
+        {budget && parseInt(budget.replace(/\./g, '')) > 0 && (
+          <View style={styles.previewCard}>
+            <Text style={styles.previewLabel}>Daily Budget Estimation</Text>
+            <Text style={styles.previewAmount}>Rp {dailyBudget.toLocaleString('id-ID')}</Text>
+            <Text style={styles.previewDesc}>
+              Your daily spending limit will be approximately this amount, based on a 30-day month.
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Save Button */}
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>Save</Text>
+        <TouchableOpacity
+          style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+          onPress={handleSave}
+          disabled={saving}
+        >
+          {saving ? (
+            <ActivityIndicator color={Colors.surface} />
+          ) : (
+            <Text style={styles.saveButtonText}>
+              {currentBudget > 0 ? 'Update Budget' : 'Save Budget'}
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -105,6 +219,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
     marginTop: 40,
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: Colors.textSecondary,
   },
   header: {
     flexDirection: 'row',
@@ -130,6 +253,31 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 24,
   },
+  currentBudgetCard: {
+    backgroundColor: Colors.primaryLight,
+    padding: 20,
+    borderRadius: 16,
+    alignItems: 'center',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  currentBudgetLabel: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  currentBudgetAmount: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: Colors.textPrimary,
+    marginBottom: 4,
+  },
+  currentBudgetHint: {
+    fontSize: 12,
+    color: Colors.textTertiary,
+    textAlign: 'center',
+  },
   inputSection: {
     alignItems: 'center',
     paddingTop: 32,
@@ -152,11 +300,13 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     minWidth: 200,
     padding: 0,
+    textAlign: 'center',
   },
   inputLabel: {
     fontSize: 14,
     color: Colors.textSecondary,
     textAlign: 'center',
+    paddingHorizontal: 20,
   },
   suggestionsContainer: {
     flexDirection: 'row',
@@ -179,13 +329,13 @@ const styles = StyleSheet.create({
   suggestionText: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.surface,
+    color: Colors.textPrimary,
   },
   suggestionTextActive: {
     color: Colors.surface,
   },
   previewCard: {
-    marginTop: 32,
+    marginTop: 24,
     backgroundColor: Colors.surface,
     padding: 24,
     borderRadius: 20,
@@ -232,6 +382,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
+  },
+  saveButtonDisabled: {
+    opacity: 0.6,
   },
   saveButtonText: {
     fontSize: 16,

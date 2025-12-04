@@ -9,11 +9,14 @@ import {
   ScrollView,
   Dimensions,
   Animated,
-  PanResponder
+  PanResponder,
+  ActivityIndicator
 } from 'react-native';
 import MapView, { Marker, Callout, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
+import { useAuth } from '../../context/AuthContext';
+import firestoreService from '../../services/firestoreService';
 import Colors from '../../constants/Colors';
 
 const { width, height } = Dimensions.get('window');
@@ -21,63 +24,84 @@ const SHEET_MIN_HEIGHT = 180;
 const SHEET_MID_HEIGHT = 240;
 const SHEET_MAX_HEIGHT = height * 0.65;
 
-export default function MapScreen({ navigation }) {
-  // Refs & States
+export default function MapScreen({ navigation, route }) {
+  const { user } = useAuth();
   const mapRef = useRef(null);
-  const [allowMaxHeight, setAllowMaxHeight] = useState(false);
+
+  // States
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentLocation, setCurrentLocation] = useState(null);
+  const [expenses, setExpenses] = useState([]);
+  const [selectedFilter, setSelectedFilter] = useState('All');
   const [nearbyPlaces, setNearbyPlaces] = useState([]);
+
+  // Filter options
+  const filters = ['All', 'Today', 'Yesterday', 'This Week', 'This Month', 'Prev Month'];
 
   // Animated value for sheet height
   const sheetHeight = useRef(new Animated.Value(SHEET_MIN_HEIGHT)).current;
-
-  // Only update "logical" heights / UI flags when necessary (avoid per-frame state updates)
   const [currentSheetHeight, setCurrentSheetHeight] = useState(SHEET_MIN_HEIGHT);
-  const [showMid, setShowMid] = useState(false); // whether sheet is at/above mid (for showing Check button)
-  const [showMax, setShowMax] = useState(false); // whether sheet is at/above max (for showing nearby list)
-
-  // keep a ref of previous value to detect threshold crossing (no re-render on ref change)
+  const [allowMaxHeight, setAllowMaxHeight] = useState(false);
+  const [showMid, setShowMid] = useState(false);
+  const [showMax, setShowMax] = useState(false);
   const prevValueRef = useRef(SHEET_MIN_HEIGHT);
 
-  // listener: only update flags when crossing thresholds (avoid setState each frame)
+  // Load data
   useEffect(() => {
-    const id = sheetHeight.addListener(({ value }) => {
-      const prev = prevValueRef.current;
-
-      // MID threshold crossing
-      if (value >= SHEET_MID_HEIGHT && prev < SHEET_MID_HEIGHT) {
-        setShowMid(true);
-      } else if (value < SHEET_MID_HEIGHT && prev >= SHEET_MID_HEIGHT) {
-        setShowMid(false);
-      }
-
-      // MAX threshold crossing
-      if (value >= SHEET_MAX_HEIGHT && prev < SHEET_MAX_HEIGHT) {
-        setShowMax(true);
-      } else if (value < SHEET_MAX_HEIGHT && prev >= SHEET_MAX_HEIGHT) {
-        setShowMax(false);
-      }
-
-      prevValueRef.current = value;
-      // DO NOT set currentSheetHeight here to avoid re-renders every frame.
-    });
-
-    return () => {
-      sheetHeight.removeListener(id);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const expenses = [
-    { id: 1, name: 'Kopi Kenangan', amount: 55000, category: 'Food & Drink', lat: -6.2, lng: 106.816666, color: Colors.categoryFood },
-    { id: 2, name: 'Grand Indonesia', amount: 450000, category: 'Shopping', lat: -6.195, lng: 106.82, color: Colors.categoryShopping },
-  ];
-
-  // Load location
-  useEffect(() => {
+    if (user?.uid) {
+      loadExpenses();
+    }
     getCurrentLocation();
-  }, []);
+  }, [user]);
+
+  // Reload when filter changes
+  useEffect(() => {
+    if (user?.uid && !loading) {
+      loadExpenses();
+    }
+  }, [selectedFilter, searchQuery]);
+
+  // Handle navigation params (when coming from ExpenseDetail)
+  useEffect(() => {
+    if (route.params?.lat && route.params?.lng) {
+      const { lat, lng } = route.params;
+
+      // Wait for map to be ready
+      setTimeout(() => {
+        if (mapRef.current) {
+          mapRef.current.animateToRegion({
+            latitude: lat,
+            longitude: lng,
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01,
+          }, 1000);
+        }
+      }, 500);
+    }
+  }, [route.params]);
+
+  const loadExpenses = async () => {
+    try {
+      setLoading(true);
+
+      const filters = {
+        category: selectedFilter,
+        searchQuery: searchQuery.trim()
+      };
+
+      const expensesData = await firestoreService.getAllExpenses(user.uid, filters);
+
+      // Filter only expenses with location
+      const expensesWithLocation = expensesData.filter(exp => exp.location);
+
+      setExpenses(expensesWithLocation);
+    } catch (error) {
+      console.error('Error loading expenses:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getCurrentLocation = async () => {
     let { status } = await Location.requestForegroundPermissionsAsync();
@@ -92,14 +116,70 @@ export default function MapScreen({ navigation }) {
     });
   };
 
-  // Helper to animate to a target height and update currentSheetHeight when animation finishes
+  // Get category style
+  const getCategoryStyle = (category) => {
+    const styles = {
+      'food': { icon: 'fast-food', color: '#FF6B6B' },
+      'transport': { icon: 'train', color: '#4D9FFF' },
+      'shopping': { icon: 'cart', color: '#FFB84D' },
+      'entertainment': { icon: 'game-controller', color: '#9B59B6' },
+      'health': { icon: 'fitness', color: '#4CAF50' },
+      'bills': { icon: 'document-text', color: '#757575' },
+      'others': { icon: 'ellipsis-horizontal-circle', color: Colors.primary },
+    };
+    return styles[category?.toLowerCase()] || styles['others'];
+  };
+
+  // Format datetime
+  const formatDateTime = (date) => {
+    if (!date) return '-';
+    const d = new Date(date);
+    return d.toLocaleDateString('en-US', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+  };
+
+  // Format filter label
+  const formatFilterLabel = (filter) => {
+    return filter;
+  };
+
+  // Listener for sheet height
+  useEffect(() => {
+    const id = sheetHeight.addListener(({ value }) => {
+      const prev = prevValueRef.current;
+
+      if (value >= SHEET_MID_HEIGHT && prev < SHEET_MID_HEIGHT) {
+        setShowMid(true);
+      } else if (value < SHEET_MID_HEIGHT && prev >= SHEET_MID_HEIGHT) {
+        setShowMid(false);
+      }
+
+      if (value >= SHEET_MAX_HEIGHT && prev < SHEET_MAX_HEIGHT) {
+        setShowMax(true);
+      } else if (value < SHEET_MAX_HEIGHT && prev >= SHEET_MAX_HEIGHT) {
+        setShowMax(false);
+      }
+
+      prevValueRef.current = value;
+    });
+
+    return () => {
+      sheetHeight.removeListener(id);
+    };
+  }, []);
+
   const animateTo = (toValue) => {
     Animated.spring(sheetHeight, {
       toValue,
       useNativeDriver: false,
       bounciness: 0,
     }).start(() => {
-      // update logical state when the animation completes
       setCurrentSheetHeight(toValue);
       prevValueRef.current = toValue;
       setShowMid(toValue >= SHEET_MID_HEIGHT);
@@ -119,56 +199,17 @@ export default function MapScreen({ navigation }) {
     animateTo(SHEET_MAX_HEIGHT);
   };
 
-  // PANRESPONDER — Drag logic (stable, avoids flicker)
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-
       onPanResponderMove: (_, gestureState) => {
-        // gestureState.dy: positive when dragging down, negative when dragging up
-        const isDraggingUp = gestureState.dy < 0;
-
-        // Compute tentative new height
         const candidateHeight = currentSheetHeight - gestureState.dy;
-
-        // If user tries to drag up but MAX isn't allowed, block upward movement beyond MID
-        if (!allowMaxHeight && isDraggingUp && candidateHeight > SHEET_MID_HEIGHT) {
-          // clamp to mid while dragging (don't update state, only set Animated value)
-          sheetHeight.setValue(SHEET_MID_HEIGHT);
-          return;
-        }
-
-        const maxLimit = allowMaxHeight ? SHEET_MAX_HEIGHT : SHEET_MID_HEIGHT;
-
-        // Clamp candidateHeight into allowable range
-        const clamped = Math.max(SHEET_MIN_HEIGHT, Math.min(candidateHeight, maxLimit));
+        const clamped = Math.max(SHEET_MIN_HEIGHT, Math.min(candidateHeight, SHEET_MID_HEIGHT));
         sheetHeight.setValue(clamped);
       },
-
       onPanResponderRelease: (_, gestureState) => {
-        const isDraggingUp = gestureState.dy < 0;
         const candidateHeight = currentSheetHeight - gestureState.dy;
-        const maxLimit = allowMaxHeight ? SHEET_MAX_HEIGHT : SHEET_MID_HEIGHT;
-
-        // If not allowed to go max and user dragged up, snap to MID (prevents direct MAX)
-        if (!allowMaxHeight && isDraggingUp) {
-          animateTo(SHEET_MID_HEIGHT);
-          return;
-        }
-
-        // Snap logic:
-        let target = SHEET_MIN_HEIGHT;
-        if (candidateHeight > SHEET_MID_HEIGHT + 50 && allowMaxHeight) {
-          target = SHEET_MAX_HEIGHT;
-        } else if (candidateHeight > SHEET_MIN_HEIGHT + 50) {
-          target = SHEET_MID_HEIGHT;
-        } else {
-          target = SHEET_MIN_HEIGHT;
-        }
-
-        // ensure target doesn't exceed permitted maxLimit
-        if (target > maxLimit) target = maxLimit;
-
+        let target = candidateHeight > SHEET_MIN_HEIGHT + 50 ? SHEET_MID_HEIGHT : SHEET_MIN_HEIGHT;
         animateTo(target);
       },
     })
@@ -176,137 +217,185 @@ export default function MapScreen({ navigation }) {
 
   const centerMapToUser = () => {
     if (!currentLocation || !mapRef.current) return;
-
-    mapRef.current.animateToRegion(
-      {
-        latitude: currentLocation.latitude,
-        longitude: currentLocation.longitude,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
-      },
-      600
-    );
+    mapRef.current.animateToRegion({
+      latitude: currentLocation.latitude,
+      longitude: currentLocation.longitude,
+      latitudeDelta: 0.005,
+      longitudeDelta: 0.005,
+    }, 600);
   };
 
   return (
-  <View style={styles.container}>
-    {/* MAP */}
-    <MapView
-      ref={mapRef}
-      provider={PROVIDER_GOOGLE}
-      style={styles.map}
-      initialRegion={currentLocation}
-      showsUserLocation
-      showsMyLocationButton={false}
-    >
-      {expenses.map((expense) => (
-        <Marker
-          key={expense.id}
-          coordinate={{ latitude: expense.lat, longitude: expense.lng }}
-          pinColor={expense.color}
+    <View style={styles.container}>
+      {/* MAP */}
+      <MapView
+        ref={mapRef}
+        provider={PROVIDER_GOOGLE}
+        style={styles.map}
+        initialRegion={currentLocation}
+        showsUserLocation
+        showsMyLocationButton={false}
+      >
+        {expenses.map((expense) => {
+          const categoryStyle = getCategoryStyle(expense.category);
+          return (
+            <Marker
+              key={expense.id}
+              coordinate={{
+                latitude: expense.location.latitude,
+                longitude: expense.location.longitude
+              }}
+              pinColor={categoryStyle.color}
+            >
+              <Callout
+                tooltip
+                onPress={() => navigation.navigate('ExpenseDetail', { expenseId: expense.id })}
+              >
+                <View style={styles.calloutContainer}>
+                  <View style={styles.calloutHeader}>
+                    <Ionicons name={categoryStyle.icon} size={16} color={categoryStyle.color} />
+                    <Text style={styles.calloutCat}>{expense.category.toUpperCase()}</Text>
+                  </View>
+                  <Text style={styles.calloutAmount}>
+                    Rp {expense.amount.toLocaleString('id-ID')}
+                  </Text>
+                  <Text style={styles.calloutName} numberOfLines={1}>
+                    {expense.locationName || 'Unknown Location'}
+                  </Text>
+                  <Text style={styles.calloutDate}>
+                    {formatDateTime(expense.date)}
+                  </Text>
+                  <View style={styles.calloutButton}>
+                    <Text style={styles.calloutLink}>View Detail</Text>
+                    <Ionicons name="arrow-forward" size={12} color={Colors.primary} />
+                  </View>
+                </View>
+              </Callout>
+            </Marker>
+          );
+        })}
+      </MapView>
+
+      {/* SEARCH BAR & GEOLOCATION */}
+      <View style={styles.topContainer}>
+        <View style={styles.searchBar}>
+          <Ionicons name="search" size={20} color="#9CA3AF" />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search expenses or places"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholderTextColor="#9CA3AF"
+          />
+          {searchQuery !== '' && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* GEOLOCATION BUTTON */}
+        <TouchableOpacity style={styles.geoBtn} onPress={centerMapToUser}>
+          <Ionicons name="locate" size={22} color="#1F2937" />
+        </TouchableOpacity>
+      </View>
+
+      {/* FILTER CHIPS */}
+      <View style={styles.filterChipsContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterChipsContent}
         >
-          <Callout
-            tooltip
-            onPress={() => navigation.navigate('ExpenseDetail', { id: expense.id })}
-          >
-            <View style={styles.calloutContainer}>
-              <Text style={styles.calloutCat}>{expense.category}</Text>
-              <Text style={styles.calloutAmount}>
-                Rp {expense.amount.toLocaleString('id-ID')}
+          {filters.map((filter) => (
+            <TouchableOpacity
+              key={filter}
+              style={[
+                styles.filterChip,
+                selectedFilter === filter && styles.filterChipActive
+              ]}
+              onPress={() => setSelectedFilter(filter)}
+            >
+              <Text style={[
+                styles.filterText,
+                selectedFilter === filter && styles.filterTextActive
+              ]}>
+                {formatFilterLabel(filter)}
               </Text>
-              <Text style={styles.calloutName}>{expense.name}</Text>
-              <Text style={styles.calloutLink}>View Detail</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* LOADING INDICATOR */}
+      {loading && (
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+            <Text style={styles.loadingText}>Loading expenses...</Text>
+          </View>
+        </View>
+      )}
+
+      {/* DRAGGABLE BOTTOM SHEET */}
+      <Animated.View style={[styles.bottomSheet, { height: sheetHeight }]}>
+        {/* Drag Handle */}
+        <View {...panResponder.panHandlers} style={styles.dragHandleArea}>
+          <View style={styles.dragHandle} />
+        </View>
+
+        <ScrollView showsVerticalScrollIndicator={false}>
+          {/* Current Location */}
+          <View style={styles.locContainer}>
+            <View style={styles.locIconBg}>
+              <Ionicons name="location" size={24} color={Colors.surface} />
             </View>
-          </Callout>
-        </Marker>
-      ))}
-    </MapView>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.locTitle}>Current Location</Text>
+              <Text style={styles.locDesc}>
+                Jl. Jenderal Sudirman No.Kav. 52-53, Senayan
+              </Text>
+            </View>
+          </View>
 
-    {/* SEARCH BAR & FILTER */}
-    <View style={styles.topContainer}>
-      <View style={styles.searchBar}>
-        <Ionicons name="search" size={20} color="#9CA3AF" />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search expenses or places"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholderTextColor="#9CA3AF"
-        />
-      </View>
+          {/* Check Nearby Button */}
+          <View
+            style={{
+              opacity: showMid ? 1 : 0,
+              height: showMid ? 'auto' : 0,
+              overflow: 'hidden',
+            }}
+            pointerEvents={showMid ? 'auto' : 'none'}
+          >
+            <TouchableOpacity style={styles.checkBtn} onPress={handleCheckNearby}>
+              <Text style={styles.checkBtnText}>Check Nearby Shopping Areas</Text>
+            </TouchableOpacity>
+          </View>
 
-      <TouchableOpacity style={styles.filterBtn}>
-        <Ionicons name="options-outline" size={20} color="#1F2937" />
-      </TouchableOpacity>
+          {/* Nearby Places */}
+          {showMax && nearbyPlaces.length > 0 && (
+            <View style={{ marginTop: 10 }}>
+              <Text style={styles.nearbyTitle}>Nearby Places</Text>
+              {nearbyPlaces.map((place) => (
+                <View key={place.id} style={styles.placeItem}>
+                  <View style={styles.placeIcon}>
+                    <Ionicons name="bag-handle" size={20} color="#374151" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.placeName}>{place.name}</Text>
+                    <Text style={styles.placeType}>{place.type}</Text>
+                  </View>
+                  <Text style={styles.placeDist}>{place.distance}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </ScrollView>
+      </Animated.View>
     </View>
-
-    {/* GEOLOCATION BUTTON — FLOATING */}
-    <TouchableOpacity style={styles.geoBtn} onPress={centerMapToUser}>
-      <Ionicons name="locate" size={22} color="#1F2937" />
-    </TouchableOpacity>
-
-    {/* DRAGGABLE BOTTOM SHEET */}
-    <Animated.View style={[styles.bottomSheet, { height: sheetHeight }]}>
-      {/* Drag Handle */}
-      <View {...panResponder.panHandlers} style={styles.dragHandleArea}>
-        <View style={styles.dragHandle} />
-      </View>
-
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Current Location */}
-        <View style={styles.locContainer}>
-          <View style={styles.locIconBg}>
-            <Ionicons name="location" size={24} color={Colors.primary} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.locTitle}>Current Location</Text>
-            <Text style={styles.locDesc}>
-              Jl. Jenderal Sudirman No.Kav. 52-53, Senayan
-            </Text>
-          </View>
-        </View>
-
-        {/* Check Nearby Button */}
-        <View
-          style={{
-            opacity: showMid ? 1 : 0,
-            height: showMid ? 'auto' : 0,
-            overflow: 'hidden',
-          }}
-          pointerEvents={showMid ? 'auto' : 'none'}
-        >
-          <TouchableOpacity style={styles.checkBtn} onPress={handleCheckNearby}>
-            <Text style={styles.checkBtnText}>Check Nearby Shopping Areas</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Nearby Places */}
-        {showMax && nearbyPlaces.length > 0 && (
-          <View style={{ marginTop: 10 }}>
-            <Text style={styles.nearbyTitle}>Nearby Places</Text>
-            {nearbyPlaces.map((place) => (
-              <View key={place.id} style={styles.placeItem}>
-                <View style={styles.placeIcon}>
-                  <Ionicons name="bag-handle" size={20} color="#374151" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.placeName}>{place.name}</Text>
-                  <Text style={styles.placeType}>{place.type}</Text>
-                </View>
-                <Text style={styles.placeDist}>{place.distance}</Text>
-              </View>
-            ))}
-          </View>
-        )}
-      </ScrollView>
-    </Animated.View>
-  </View>
-);
+  );
 }
 
-// ---------------------------
-// 🎨 STYLE SECTION
-// ---------------------------
 const styles = StyleSheet.create({
   container: { flex: 1 },
   map: { width, height },
@@ -342,7 +431,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  filterBtn: {
+  geoBtn: {
     width: 50,
     height: 50,
     backgroundColor: 'white',
@@ -355,40 +444,151 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
   },
 
-  // 🌍 NEW — GEOLOCATION BUTTON
-  geoBtn: {
+  // Filter Chips
+  filterChipsContainer: {
     position: 'absolute',
-    top: 115,   // tepat di bawah filter
-    right: 20,
-    width: 50,
-    height: 50,
+    top: 115,
+    left: 0,
+    right: 0,
+  },
+
+  filterChipsContent: {
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+
+  filterChip: {
+    height: 36,
+    paddingHorizontal: 16,
+    borderRadius: 18,
     backgroundColor: 'white',
-    borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 5,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    elevation: 2,
   },
 
-  calloutContainer: {
+  filterChipActive: {
+    backgroundColor: Colors.primary,
+  },
+
+  filterText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+
+  filterTextActive: {
+    color: Colors.surface,
+  },
+
+  // Loading Overlay
+  loadingOverlay: {
+    position: 'absolute',
+    top: 170,
+    left: 20,
+    right: 20,
+    alignItems: 'center',
+  },
+
+  loadingBox: {
     backgroundColor: 'white',
-    padding: 12,
+    padding: 16,
     borderRadius: 12,
-    width: 160,
+    flexDirection: 'row',
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    elevation: 5,
+    shadowOpacity: 0.1,
+    elevation: 4,
   },
 
-  calloutCat: { fontSize: 10, color: '#9CA3AF', marginBottom: 4 },
-  calloutAmount: { fontSize: 16, fontWeight: 'bold', color: '#1F2937', marginBottom: 4 },
-  calloutName: { fontSize: 12, marginBottom: 8, color: '#6B7280' },
-  calloutLink: { fontSize: 11, color: Colors.primary, fontWeight: 'bold' },
+  loadingText: {
+    marginLeft: 12,
+    color: Colors.textSecondary,
+    fontSize: 14,
+  },
 
+  // Callout
+  calloutContainer: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'white',
+    padding: 16,
+    borderRadius: 16,
+    maxWidth: 220,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    elevation: 8,
+  },
+
+  calloutHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  
+  calloutCat: {
+    fontSize: 10,
+    color: Colors.textSecondary,
+    fontWeight: '600',
+    marginLeft: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    letterSpacing: 0.5,
+  },
+  
+  calloutAmount: {
+    flexDirection: 'row',
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: Colors.textPrimary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  
+  calloutName: {
+    flexDirection: 'row',
+    fontSize: 14,
+    color: Colors.textSecondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  
+  calloutDate: {
+    flexDirection: 'row',
+    fontSize: 11,
+    color: Colors.textTertiary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+
+  calloutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    marginTop: 4,
+  },
+
+  calloutLink: {
+    fontSize: 13,
+    color: Colors.primary,
+    fontWeight: 'bold',
+    marginRight: 4,
+  },
+
+  // Bottom Sheet
   bottomSheet: {
     position: 'absolute',
     bottom: 0,
@@ -427,15 +627,74 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: Colors.primaryOpacity10,
+    backgroundColor: Colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
 
-  locTitle: { fontWeight: 'bold', fontSize: 14, color: '#1F2937' },
-  locDesc: { fontSize: 12, color: '#6B7280', marginTop: 2 },
+  locTitle: {
+    fontWeight: 'bold',
+    fontSize: 14,
+    color: Colors.textPrimary,
+  },
 
+  locDesc: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+
+  statsContainer: {
+    flexDirection: 'row',
+    backgroundColor: Colors.primaryLight,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+  },
+
+  statBox: {
+    flex: 1,
+    alignItems: 'center',
+  },
+
+  statNumber: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Colors.primary,
+    marginBottom: 4,
+  },
+
+  statLabel: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+
+  statDivider: {
+    width: 1,
+    backgroundColor: Colors.border,
+    marginHorizontal: 16,
+  },
+
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+
+  emptyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+    marginTop: 12,
+  },
+
+  emptySubtext: {
+    fontSize: 13,
+    color: Colors.textTertiary,
+    marginTop: 6,
+    textAlign: 'center',
+    paddingHorizontal: 20,
+  },
   checkBtn: {
     backgroundColor: Colors.primary,
     borderRadius: 25,
