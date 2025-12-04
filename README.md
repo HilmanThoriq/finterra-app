@@ -1,7 +1,7 @@
 <div align="center">
   <img src="./assets/images/finterra-icon.png" alt="FINTERRA Logo" width="150" height="150" />
   
-  <h1>🌍 FINTERRA</h1>
+  <h1>🌍 FINTERRA 🌍</h1>
   <h3>Smart Spending Management with Location-Based Intelligence</h3>
   <p><em>Track Your Spending, Control Your Budget</em></p>
   
@@ -36,6 +36,7 @@ Dengan FINTERRA, Anda dapat:
 - 📊 Memantau budget bulanan dengan visualisasi real-time
 - 🗺️ Menemukan tempat-tempat terdekat dengan GPS precision
 - 📈 Menganalisis pola pengeluaran dengan statistik lengkap
+- 🔥 Visualisasi heatmap untuk hotspot pengeluaran
 
 > **Filosofi Produk:** "Uang bukan hanya angka, tetapi juga cerita tentang ke mana Anda pergi dan apa yang Anda lakukan."
 
@@ -55,6 +56,7 @@ Dengan FINTERRA, Anda dapat:
 - **Geocoding:** Konversi otomatis koordinat GPS menjadi alamat lengkap
 - **Nearby Places:** Temukan tempat-tempat dalam radius 50 meter dengan Google Places API
 - **Real-time Distance Calculation:** Haversine formula untuk akurasi jarak sebenarnya
+- **Heatmap Visualization:** Identifikasi zona hotspot pengeluaran dengan color-coded density
 
 ### 3. 📊 Budget Monitoring Dashboard
 - **Monthly Budget Tracker:** Set dan pantau budget bulanan dengan progress bar
@@ -113,7 +115,7 @@ Dengan FINTERRA, Anda dapat:
 | **Location Services** | Expo Location | GPS tracking dengan high accuracy mode |
 | **Geocoding** | Google Geocoding API | Convert coordinates → addresses |
 | **Places Search** | Google Places API | Nearby places discovery & details |
-| **Directions** | Google Directions API | (Future) Turn-by-turn navigation |
+| **Heatmap** | Google Maps Heatmap Layer | Visualisasi density pengeluaran |
 
 ### **State Management & Logic**
 - **React Hooks:** `useState`, `useEffect`, `useRef`, `useContext`
@@ -130,35 +132,65 @@ FINTERRA menggunakan **Firebase Firestore** dengan struktur koleksi berikut:
 ```javascript
 // Collection: users
 {
-  uid: "user123",
-  email: "user@example.com",
-  displayName: "John Doe",
-  createdAt: Timestamp
+  uid: "hilman_thoriq_123",
+  email: "hilmanthoriq@mail.ugm.ac.id",
+  displayName: "Hilman Thoriq",
+  createdAt: Timestamp(2025-01-15T08:30:00Z)
 }
 
-// Collection: expenses
+// Collection: expenses (Contoh Data Real)
 {
-  id: "expense123",
-  userId: "user123",
-  amount: 50000,
+  id: "exp_001",
+  userId: "hilman_thoriq_123",
+  amount: 35000,
   category: "food",
-  locationName: "Starbucks Central Park",
+  locationName: "Kopi Kenangan Jalan Kaliurang KM 5",
   location: {
-    latitude: -6.1754,
-    longitude: 106.8272
+    latitude: -7.7644,
+    longitude: 110.3753
   },
-  note: "Lunch with client",
-  date: Timestamp,
-  createdAt: Timestamp,
-  updatedAt: Timestamp
+  note: "Kopi sore setelah kuliah PGPBL",
+  date: Timestamp(2025-01-15T16:45:00Z),
+  createdAt: Timestamp(2025-01-15T16:45:30Z),
+  updatedAt: Timestamp(2025-01-15T16:45:30Z)
+}
+
+{
+  id: "exp_002",
+  userId: "hilman_thoriq_123",
+  amount: 50000,
+  category: "transport",
+  locationName: "Jalan Kaliurang KM 5 - Kampus UGM",
+  location: {
+    latitude: -7.7703,
+    longitude: 110.3774
+  },
+  note: "Gojek pulang dari kampus",
+  date: Timestamp(2025-01-15T18:20:00Z),
+  createdAt: Timestamp(2025-01-15T18:20:15Z)
+}
+
+{
+  id: "exp_003",
+  userId: "hilman_thoriq_123",
+  amount: 125000,
+  category: "shopping",
+  locationName: "Ambarrukmo Plaza Yogyakarta",
+  location: {
+    latitude: -7.7824,
+    longitude: 110.4026
+  },
+  note: "Beli buku GIS untuk referensi tugas akhir",
+  date: Timestamp(2025-01-16T14:30:00Z),
+  createdAt: Timestamp(2025-01-16T14:30:45Z)
 }
 
 // Collection: budgets
 {
-  userId: "user123",
-  amount: 5000000,
-  month: "2025-12",
-  updatedAt: Timestamp
+  userId: "hilman_thoriq_123",
+  amount: 2000000,
+  month: "2025-01",
+  updatedAt: Timestamp(2025-01-01T00:00:00Z)
 }
 ```
 
@@ -180,6 +212,8 @@ FINTERRA menggunakan **Firebase Firestore** dengan struktur koleksi berikut:
 | **Address Geocoding** | Google Geocoding API | `/maps/api/geocode/json` | Coordinates → Address |
 | **Nearby Places** | Google Places API | `/maps/api/place/nearbysearch/json` | POI discovery (50m radius) |
 | **Map Visualization** | Google Maps SDK | React Native Maps | Interactive map rendering |
+| **Heatmap Data** | Google Maps Heatmap Layer | Weighted lat/lng points | Density visualization |
+
 
 ### **API Keys Required:**
 ```json
