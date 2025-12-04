@@ -461,7 +461,7 @@ Aplikasi ini dikembangkan sebagai bagian dari tugas akhir praktikum **Pemrograma
 - **Program Studi:** Sistem Informasi Geografis 2023
 - **Institusi:** Universitas Gadjah Mada (UGM)
 - **Mata Kuliah:** Praktikum Pemrograman Geospasial: Perangkat Bergerak Lanjut
-- **Tahun Akademik:** 2024/2025
+- **Tahun Akademik:** 2025/2026
 
 ---
 
