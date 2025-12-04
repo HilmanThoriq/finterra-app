@@ -334,7 +334,7 @@ FINTERRA-APP/
 
 ### **Step 1: Clone Repository**
 ```bash
-git clone https://github.com/yourusername/finterra-app.git
+git clone https://github.com/HilmanThoriq/finterra-app.git
 cd finterra-app
 ```
 
