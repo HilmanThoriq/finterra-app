@@ -369,6 +369,7 @@ const styles = StyleSheet.create({
   filterChip: {
     height: 36,
     paddingHorizontal: 16,
+    marginBottom: 8,
     borderRadius: 18,
     backgroundColor: Colors.surface,
     justifyContent: 'center',

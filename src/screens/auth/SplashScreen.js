@@ -45,7 +45,7 @@ const styles = StyleSheet.create({
   },
   appName: {
     fontSize: 36,
-    fontWeight: 'bold',
+    fontWeight: '900',
     color: Colors.primary,
     marginBottom: 8,
   },

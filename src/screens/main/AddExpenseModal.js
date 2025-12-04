@@ -461,10 +461,12 @@ const styles = StyleSheet.create({
     fontSize: 48,
     fontWeight: 'bold',
     color: Colors.primary,
-    minWidth: 200,
+    flex: 0,
+    textAlign: 'center',
   },
   categoriesSection: {
     marginBottom: 24,
+    alignItems: 'center',
   },
   sectionLabel: {
     fontSize: 14,
@@ -476,6 +478,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
+    justifyContent: 'center',
   },
   categoryItem: {
     width: '22%',

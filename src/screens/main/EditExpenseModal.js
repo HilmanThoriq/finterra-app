@@ -430,10 +430,12 @@ const styles = StyleSheet.create({
     fontSize: 48,
     fontWeight: 'bold',
     color: Colors.primary,
-    minWidth: 200,
+    flex: 0,
+    textAlign: 'center',
   },
   categoriesSection: {
     marginBottom: 24,
+    alignItems: 'center',
   },
   sectionLabel: {
     fontSize: 14,
@@ -445,6 +447,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
+    justifyContent: 'center',
   },
   categoryItem: {
     width: '22%',
@@ -470,6 +473,7 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     textAlign: 'center',
     fontWeight: '500',
+    
   },
   dateTimeSection: {
     flexDirection: 'row',
@@ -551,7 +555,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.success + '20',
     borderRadius: 12,
     padding: 12,
-    marginBottom: 12,
+    marginBottom: 24,
     gap: 8,
   },
   selectedLocationText: {

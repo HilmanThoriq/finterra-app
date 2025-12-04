@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
   },
   skipButton: {
     position: 'absolute',
-    top: 20,
+    top: 50,
     right: 20,
     zIndex: 10,
     paddingVertical: 8,

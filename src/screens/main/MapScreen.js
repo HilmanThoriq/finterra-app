@@ -10,9 +10,10 @@ import {
   Dimensions,
   Animated,
   PanResponder,
-  ActivityIndicator
+  ActivityIndicator,
+  Alert
 } from 'react-native';
-import MapView, { Marker, Callout, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Callout, PROVIDER_GOOGLE, Heatmap } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useAuth } from '../../context/AuthContext';
@@ -24,6 +25,8 @@ const SHEET_MIN_HEIGHT = 180;
 const SHEET_MID_HEIGHT = 240;
 const SHEET_MAX_HEIGHT = height * 0.65;
 
+const GOOGLE_PLACES_API_KEY = 'AIzaSyAy6pTdTp8lCD3ehksPfh6C4oYvZ9KIF9U';
+
 export default function MapScreen({ navigation, route }) {
   const { user } = useAuth();
   const mapRef = useRef(null);
@@ -32,9 +35,14 @@ export default function MapScreen({ navigation, route }) {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentLocation, setCurrentLocation] = useState(null);
+  const [currentAddress, setCurrentAddress] = useState('Getting your location...');
   const [expenses, setExpenses] = useState([]);
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [nearbyPlaces, setNearbyPlaces] = useState([]);
+  const [loadingNearby, setLoadingNearby] = useState(false);
+  const [showHeatmap, setShowHeatmap] = useState(false);
+  const [heatmapPoints, setHeatmapPoints] = useState([]);
+  const [hasSeenHeatmapInfo, setHasSeenHeatmapInfo] = useState(false);
 
   // Filter options
   const filters = ['All', 'Today', 'Yesterday', 'This Week', 'This Month', 'Prev Month'];
@@ -62,12 +70,11 @@ export default function MapScreen({ navigation, route }) {
     }
   }, [selectedFilter, searchQuery]);
 
-  // Handle navigation params (when coming from ExpenseDetail)
+  // Handle navigation params
   useEffect(() => {
     if (route.params?.lat && route.params?.lng) {
       const { lat, lng } = route.params;
 
-      // Wait for map to be ready
       setTimeout(() => {
         if (mapRef.current) {
           mapRef.current.animateToRegion({
@@ -81,6 +88,11 @@ export default function MapScreen({ navigation, route }) {
     }
   }, [route.params]);
 
+  // Check if heatmap should be shown based on filter
+  const shouldShowHeatmap = (filter) => {
+    return ['This Week', 'This Month', 'Prev Month'].includes(filter);
+  };
+
   const loadExpenses = async () => {
     try {
       setLoading(true);
@@ -91,11 +103,18 @@ export default function MapScreen({ navigation, route }) {
       };
 
       const expensesData = await firestoreService.getAllExpenses(user.uid, filters);
-
-      // Filter only expenses with location
       const expensesWithLocation = expensesData.filter(exp => exp.location);
 
       setExpenses(expensesWithLocation);
+
+      // Generate heatmap data if filter is weekly or monthly
+      if (shouldShowHeatmap(selectedFilter)) {
+        setShowHeatmap(true);
+        generateHeatmapData(expensesWithLocation);
+      } else {
+        setShowHeatmap(false);
+        setHeatmapPoints([]);
+      }
     } catch (error) {
       console.error('Error loading expenses:', error);
     } finally {
@@ -103,20 +122,233 @@ export default function MapScreen({ navigation, route }) {
     }
   };
 
-  const getCurrentLocation = async () => {
-    let { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') return;
+  const generateHeatmapData = (expensesData) => {
+    const points = [];
+    
+    // Group expenses by location (with some tolerance for nearby points)
+    const locationGroups = {};
+    const tolerance = 0.0001; // approximately 11 meters
 
-    let location = await Location.getCurrentPositionAsync({});
-    setCurrentLocation({
-      latitude: location.coords.latitude,
-      longitude: location.coords.longitude,
-      latitudeDelta: 0.05,
-      longitudeDelta: 0.05,
+    expensesData.forEach(expense => {
+      if (!expense.location) return;
+
+      const lat = expense.location.latitude;
+      const lng = expense.location.longitude;
+      
+      // Find if there's a nearby location already grouped
+      let foundGroup = false;
+      for (let key in locationGroups) {
+        const [groupLat, groupLng] = key.split(',').map(Number);
+        const distance = Math.sqrt(
+          Math.pow(lat - groupLat, 2) + Math.pow(lng - groupLng, 2)
+        );
+        
+        if (distance < tolerance) {
+          locationGroups[key].amount += expense.amount;
+          locationGroups[key].count += 1;
+          foundGroup = true;
+          break;
+        }
+      }
+
+      if (!foundGroup) {
+        const key = `${lat},${lng}`;
+        locationGroups[key] = {
+          latitude: lat,
+          longitude: lng,
+          amount: expense.amount,
+          count: 1
+        };
+      }
     });
+
+    // Find max amount for weight calculation
+    const amounts = Object.values(locationGroups).map(g => g.amount);
+    const maxAmount = Math.max(...amounts, 1);
+
+    // Convert to heatmap points with weights
+    Object.values(locationGroups).forEach(group => {
+      // Weight based on total spending at this location
+      // Normalize between 0-1, with minimum weight of 0.2 for visibility
+      const normalizedWeight = Math.max(0.2, group.amount / maxAmount);
+      
+      points.push({
+        latitude: group.latitude,
+        longitude: group.longitude,
+        weight: normalizedWeight
+      });
+    });
+
+    setHeatmapPoints(points);
   };
 
-  // Get category style
+  const getCurrentLocation = async () => {
+    try {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Location permission is required');
+        return;
+      }
+
+      let location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High
+      });
+
+      const { latitude, longitude } = location.coords;
+
+      setCurrentLocation({
+        latitude,
+        longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      });
+
+      const [streetAddress, placeName] = await Promise.all([
+        getReverseGeocode(latitude, longitude),
+        getNearestPlaceName(latitude, longitude)
+      ]);
+
+      let finalAddress = "";
+
+      if (streetAddress) {
+        finalAddress = streetAddress;
+      } else {
+        finalAddress = "Unknown Location";
+      }
+
+      setCurrentAddress(finalAddress);
+
+      await getReverseGeocode(latitude, longitude);
+    } catch (error) {
+      console.error('Error getting location:', error);
+      setCurrentAddress('Unable to get location');
+    }
+  };
+
+  const getReverseGeocode = async (latitude, longitude) => {
+    try {
+      if (!latitude || !longitude) {
+        console.log("Reverse geocode skipped: invalid coords", latitude, longitude);
+        return null;
+      }
+
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_PLACES_API_KEY}`;
+
+      const response = await fetch(url);
+      const data = await response.json();
+
+      if (data.status === "OK" && data.results.length > 0) {
+        return data.results[0].formatted_address;
+      } else {
+        console.log("Reverse geocode error status:", data.status);
+        return null;
+      }
+    } catch (err) {
+      console.log("Reverse geocode error:", err);
+      return null;
+    }
+  };
+
+  const getNearestPlaceName = async (latitude, longitude) => {
+    try {
+      const radius = 50;
+      const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${latitude},${longitude}&radius=${radius}&type=establishment&key=${GOOGLE_PLACES_API_KEY}`;
+      const response = await fetch(url);
+      const data = await response.json();
+
+      if (data.status === 'OK' && data.results.length > 0) {
+        return data.results[0].name;
+      }
+    } catch (err) {
+      console.warn('getNearestPlaceName error:', err);
+    }
+    return null;
+  };
+
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371e3;
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+      Math.cos(φ1) * Math.cos(φ2) *
+      Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const distance = R * c;
+
+    return distance;
+  };
+
+  const formatDistance = (meters) => {
+    if (meters < 1000) {
+      return `${Math.round(meters)}m`;
+    } else {
+      return `${(meters / 1000).toFixed(1)}km`;
+    }
+  };
+
+  const handleCheckNearby = async () => {
+    if (!currentLocation) {
+      Alert.alert('Error', 'Current location not available');
+      return;
+    }
+
+    setLoadingNearby(true);
+    setAllowMaxHeight(true);
+    animateTo(SHEET_MAX_HEIGHT);
+
+    try {
+      const { latitude, longitude } = currentLocation;
+      const radius = 50;
+
+      const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${latitude},${longitude}&radius=${radius}&key=${GOOGLE_PLACES_API_KEY}`;
+
+      const response = await fetch(url);
+      const data = await response.json();
+
+      if (data.status === 'OK' && data.results.length > 0) {
+        const placesWithDistance = data.results.map(place => {
+          const distance = calculateDistance(
+            latitude,
+            longitude,
+            place.geometry.location.lat,
+            place.geometry.location.lng
+          );
+
+          return {
+            id: place.place_id,
+            name: place.name,
+            type: place.types[0]?.replace(/_/g, ' ') || 'Place',
+            distance: distance,
+            distanceText: formatDistance(distance),
+            location: place.geometry.location,
+            address: place.vicinity
+          };
+        });
+
+        placesWithDistance.sort((a, b) => a.distance - b.distance);
+        const top3Places = placesWithDistance.slice(0, 3);
+
+        setNearbyPlaces(top3Places);
+      } else if (data.status === 'ZERO_RESULTS') {
+        Alert.alert('No Places Found', 'No places found within 50m radius');
+        setNearbyPlaces([]);
+      } else {
+        Alert.alert('Error', `Google Places API error: ${data.status}`);
+        setNearbyPlaces([]);
+      }
+    } catch (error) {
+      console.error('Error fetching nearby places:', error);
+      Alert.alert('Error', 'Failed to fetch nearby places');
+      setNearbyPlaces([]);
+    } finally {
+      setLoadingNearby(false);
+    }
+  };
+
   const getCategoryStyle = (category) => {
     const styles = {
       'food': { icon: 'fast-food', color: '#FF6B6B' },
@@ -130,7 +362,6 @@ export default function MapScreen({ navigation, route }) {
     return styles[category?.toLowerCase()] || styles['others'];
   };
 
-  // Format datetime
   const formatDateTime = (date) => {
     if (!date) return '-';
     const d = new Date(date);
@@ -144,12 +375,6 @@ export default function MapScreen({ navigation, route }) {
     });
   };
 
-  // Format filter label
-  const formatFilterLabel = (filter) => {
-    return filter;
-  };
-
-  // Listener for sheet height
   useEffect(() => {
     const id = sheetHeight.addListener(({ value }) => {
       const prev = prevValueRef.current;
@@ -187,29 +412,32 @@ export default function MapScreen({ navigation, route }) {
     });
   };
 
-  // Check Nearby handler
-  const handleCheckNearby = () => {
-    setAllowMaxHeight(true);
-    setNearbyPlaces([
-      { id: 1, name: 'Pacific Place', distance: '150m', type: 'Shopping Mall' },
-      { id: 2, name: 'Plaza Senayan', distance: '1.2km', type: 'Shopping Mall' },
-      { id: 3, name: 'Grand Indonesia', distance: '300m', type: 'Shopping Mall' },
-    ]);
-
-    animateTo(SHEET_MAX_HEIGHT);
-  };
-
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onPanResponderMove: (_, gestureState) => {
         const candidateHeight = currentSheetHeight - gestureState.dy;
-        const clamped = Math.max(SHEET_MIN_HEIGHT, Math.min(candidateHeight, SHEET_MID_HEIGHT));
+        const maxAllowed = allowMaxHeight ? SHEET_MAX_HEIGHT : SHEET_MID_HEIGHT;
+        const clamped = Math.max(SHEET_MIN_HEIGHT, Math.min(candidateHeight, maxAllowed));
         sheetHeight.setValue(clamped);
       },
       onPanResponderRelease: (_, gestureState) => {
         const candidateHeight = currentSheetHeight - gestureState.dy;
-        let target = candidateHeight > SHEET_MIN_HEIGHT + 50 ? SHEET_MID_HEIGHT : SHEET_MIN_HEIGHT;
+        const maxAllowed = allowMaxHeight ? SHEET_MAX_HEIGHT : SHEET_MID_HEIGHT;
+
+        let target;
+        if (allowMaxHeight) {
+          if (candidateHeight > SHEET_MID_HEIGHT + 100) {
+            target = SHEET_MAX_HEIGHT;
+          } else if (candidateHeight > SHEET_MIN_HEIGHT + 50) {
+            target = SHEET_MID_HEIGHT;
+          } else {
+            target = SHEET_MIN_HEIGHT;
+          }
+        } else {
+          target = candidateHeight > SHEET_MIN_HEIGHT + 50 ? SHEET_MID_HEIGHT : SHEET_MIN_HEIGHT;
+        }
+
         animateTo(target);
       },
     })
@@ -225,6 +453,27 @@ export default function MapScreen({ navigation, route }) {
     }, 600);
   };
 
+  const toggleHeatmap = () => {
+    // Show alert only on first click when enabling heatmap
+    if (!showHeatmap && !hasSeenHeatmapInfo) {
+      Alert.alert(
+        'Heatmap View',
+        'Heatmap shows spending intensity across locations. Red areas indicate highest spending, transitioning through orange and yellow to green for lower spending.',
+        [
+          {
+            text: 'Got it',
+            onPress: () => {
+              setHasSeenHeatmapInfo(true);
+              setShowHeatmap(true);
+            }
+          }
+        ]
+      );
+    } else {
+      setShowHeatmap(!showHeatmap);
+    }
+  };
+
   return (
     <View style={styles.container}>
       {/* MAP */}
@@ -236,7 +485,22 @@ export default function MapScreen({ navigation, route }) {
         showsUserLocation
         showsMyLocationButton={false}
       >
-        {expenses.map((expense) => {
+        {/* Heatmap Layer */}
+        {showHeatmap && heatmapPoints.length > 0 && (
+          <Heatmap
+            points={heatmapPoints}
+            radius={40}
+            opacity={0.7}
+            gradient={{
+              colors: ['#00FF00', '#FFFF00', '#FF8C00', '#FF0000'],
+              startPoints: [0.1, 0.4, 0.7, 1.0],
+              colorMapSize: 256
+            }}
+          />
+        )}
+
+        {/* Markers - only show when heatmap is off */}
+        {!showHeatmap && expenses.map((expense) => {
           const categoryStyle = getCategoryStyle(expense.category);
           return (
             <Marker
@@ -294,7 +558,6 @@ export default function MapScreen({ navigation, route }) {
           )}
         </View>
 
-        {/* GEOLOCATION BUTTON */}
         <TouchableOpacity style={styles.geoBtn} onPress={centerMapToUser}>
           <Ionicons name="locate" size={22} color="#1F2937" />
         </TouchableOpacity>
@@ -320,12 +583,36 @@ export default function MapScreen({ navigation, route }) {
                 styles.filterText,
                 selectedFilter === filter && styles.filterTextActive
               ]}>
-                {formatFilterLabel(filter)}
+                {filter}
               </Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
       </View>
+
+      {/* HEATMAP TOGGLE BUTTON - Only show when heatmap is available */}
+      {shouldShowHeatmap(selectedFilter) && heatmapPoints.length > 0 && (
+        <Animated.View 
+          style={[
+            styles.heatmapBtn, 
+            showHeatmap && styles.heatmapBtnActive,
+            {
+              bottom: Animated.add(sheetHeight, 10)
+            }
+          ]}
+        >
+          <TouchableOpacity 
+            style={styles.heatmapBtnInner}
+            onPress={toggleHeatmap}
+          >
+            <Ionicons 
+              name={showHeatmap ? "flame" : "flame-outline"} 
+              size={22} 
+              color={showHeatmap ? "#FF4444" : "#1F2937"} 
+            />
+          </TouchableOpacity>
+        </Animated.View>
+      )}
 
       {/* LOADING INDICATOR */}
       {loading && (
@@ -339,7 +626,6 @@ export default function MapScreen({ navigation, route }) {
 
       {/* DRAGGABLE BOTTOM SHEET */}
       <Animated.View style={[styles.bottomSheet, { height: sheetHeight }]}>
-        {/* Drag Handle */}
         <View {...panResponder.panHandlers} style={styles.dragHandleArea}>
           <View style={styles.dragHandle} />
         </View>
@@ -352,8 +638,8 @@ export default function MapScreen({ navigation, route }) {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.locTitle}>Current Location</Text>
-              <Text style={styles.locDesc}>
-                Jl. Jenderal Sudirman No.Kav. 52-53, Senayan
+              <Text style={styles.locDesc} numberOfLines={1} ellipsizeMode="tail">
+                {currentAddress}
               </Text>
             </View>
           </View>
@@ -367,8 +653,16 @@ export default function MapScreen({ navigation, route }) {
             }}
             pointerEvents={showMid ? 'auto' : 'none'}
           >
-            <TouchableOpacity style={styles.checkBtn} onPress={handleCheckNearby}>
-              <Text style={styles.checkBtnText}>Check Nearby Shopping Areas</Text>
+            <TouchableOpacity
+              style={styles.checkBtn}
+              onPress={handleCheckNearby}
+              disabled={loadingNearby}
+            >
+              {loadingNearby ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text style={styles.checkBtnText}>Check Nearby Places (50m)</Text>
+              )}
             </TouchableOpacity>
           </View>
 
@@ -379,15 +673,23 @@ export default function MapScreen({ navigation, route }) {
               {nearbyPlaces.map((place) => (
                 <View key={place.id} style={styles.placeItem}>
                   <View style={styles.placeIcon}>
-                    <Ionicons name="bag-handle" size={20} color="#374151" />
+                    <Ionicons name="location" size={20} color="#374151" />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.placeName}>{place.name}</Text>
                     <Text style={styles.placeType}>{place.type}</Text>
                   </View>
-                  <Text style={styles.placeDist}>{place.distance}</Text>
+                  <Text style={styles.placeDist}>{place.distanceText}</Text>
                 </View>
               ))}
+            </View>
+          )}
+
+          {showMax && nearbyPlaces.length === 0 && !loadingNearby && (
+            <View style={styles.emptyState}>
+              <Ionicons name="location-outline" size={48} color={Colors.textTertiary} />
+              <Text style={styles.emptyText}>No places found nearby</Text>
+              <Text style={styles.emptySubtext}>Try expanding the search radius</Text>
             </View>
           )}
         </ScrollView>
@@ -444,7 +746,38 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
   },
 
-  // Filter Chips
+  heatmapBtn: {
+    position: 'absolute',
+    left: 20,
+    width: 50,
+    height: 50,
+    backgroundColor: 'white',
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.9,
+    elevation: 50,
+  },
+
+  heatmapBtnInner: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  heatmapBtnActive: {
+    backgroundColor: '#FFE5E5',
+    borderWidth: 2,
+    borderColor: '#FF4444',
+    shadowColor: '#FF4444',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    elevation: 5,
+  },
+
   filterChipsContainer: {
     position: 'absolute',
     top: 115,
@@ -455,6 +788,7 @@ const styles = StyleSheet.create({
   filterChipsContent: {
     paddingHorizontal: 20,
     gap: 8,
+    marginBottom: 5,
   },
 
   filterChip: {
@@ -484,7 +818,6 @@ const styles = StyleSheet.create({
     color: Colors.surface,
   },
 
-  // Loading Overlay
   loadingOverlay: {
     position: 'absolute',
     top: 170,
@@ -511,7 +844,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  // Callout
   calloutContainer: {
     flexDirection: 'column',
     alignItems: 'center',
@@ -532,42 +864,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 8,
   },
-  
+
   calloutCat: {
     fontSize: 10,
     color: Colors.textSecondary,
     fontWeight: '600',
     marginLeft: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
     letterSpacing: 0.5,
   },
-  
+
   calloutAmount: {
-    flexDirection: 'row',
     fontSize: 32,
     fontWeight: 'bold',
     color: Colors.textPrimary,
-    alignItems: 'center',
-    justifyContent: 'center',
     marginBottom: 6,
   },
-  
+
   calloutName: {
-    flexDirection: 'row',
     fontSize: 14,
     color: Colors.textSecondary,
-    alignItems: 'center',
-    justifyContent: 'center',
     marginBottom: 4,
   },
-  
+
   calloutDate: {
-    flexDirection: 'row',
     fontSize: 11,
     color: Colors.textTertiary,
-    alignItems: 'center',
-    justifyContent: 'center',
     marginBottom: 12,
   },
 
@@ -588,7 +909,6 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
 
-  // Bottom Sheet
   bottomSheet: {
     position: 'absolute',
     bottom: 0,
@@ -643,58 +963,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textSecondary,
     marginTop: 2,
+    flexShrink: 1,
   },
 
-  statsContainer: {
+  heatmapInfo: {
     flexDirection: 'row',
-    backgroundColor: Colors.primaryLight,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-  },
-
-  statBox: {
-    flex: 1,
     alignItems: 'center',
+    backgroundColor: '#E8F4FF',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 16,
+    gap: 8,
   },
 
-  statNumber: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.primary,
-    marginBottom: 4,
-  },
-
-  statLabel: {
+  heatmapInfoText: {
+    flex: 1,
     fontSize: 12,
     color: Colors.textSecondary,
+    lineHeight: 16,
   },
 
-  statDivider: {
-    width: 1,
-    backgroundColor: Colors.border,
-    marginHorizontal: 16,
-  },
-
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 32,
-  },
-
-  emptyText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-    marginTop: 12,
-  },
-
-  emptySubtext: {
-    fontSize: 13,
-    color: Colors.textTertiary,
-    marginTop: 6,
-    textAlign: 'center',
-    paddingHorizontal: 20,
-  },
   checkBtn: {
     backgroundColor: Colors.primary,
     borderRadius: 25,
@@ -703,7 +991,11 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
 
-  checkBtnText: { color: 'white', fontWeight: 'bold', fontSize: 14 },
+  checkBtnText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 14
+  },
 
   nearbyTitle: {
     fontSize: 14,
@@ -732,7 +1024,39 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
 
-  placeName: { fontSize: 14, fontWeight: '600', color: '#1F2937' },
-  placeType: { fontSize: 11, color: '#9CA3AF', marginTop: 2 },
-  placeDist: { fontSize: 12, color: '#9CA3AF', fontWeight: '600' },
+  placeName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937'
+  },
+
+  placeType: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginTop: 2
+  },
+
+  placeDist: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    fontWeight: '600'
+  },
+
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+
+  emptyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+    marginTop: 12,
+  },
+
+  emptySubtext: {
+    fontSize: 13,
+    color: Colors.textTertiary,
+    marginTop: 6,
+  },
 });

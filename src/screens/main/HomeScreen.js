@@ -304,7 +304,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 24,
     paddingTop: 32, 
-    marginTop: 20,
+    marginTop: 10,
     marginBottom: 20,
   },
   greeting: {

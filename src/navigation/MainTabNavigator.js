@@ -79,7 +79,7 @@ export default function MainTabNavigator() {
           options={{
             tabBarLabel: () => null, // Tidak ada label untuk tombol plus
             tabBarIcon: () => (
-              <Ionicons name="add" size={32} color="#fff" />
+              <Ionicons name="add" size={32} color="#fff"style={{ marginTop: -3, marginLeft: -1}}/>
             ),
             tabBarButton: (props) => <CustomTabBarButton {...props} />,
           }}
